@@ -10,27 +10,27 @@ A collection of reusable [Claude Code](https://claude.ai/claude-code) skills for
 
 ## Installation
 
-### One-liner (recommended)
+### Into current repo (default)
 
-Fetch the latest skills directly into your user-level Claude config — no clone, no submodule:
+Run from the root of the repo you want to add skills to:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/screaming-in-space/agent-tools/main/install.sh)
 ```
 
-### Manual
+This installs skills into `.claude/skills/` in your current directory. Commit them to share with your team.
 
-Copy a specific skill into your global Claude skills directory:
+### Global (all repos)
 
 ```bash
-mkdir -p ~/.claude/skills/agentify
-curl -fsSL https://raw.githubusercontent.com/screaming-in-space/agent-tools/main/.claude/skills/agentify/SKILL.md \
-  -o ~/.claude/skills/agentify/SKILL.md
+bash <(curl -fsSL https://raw.githubusercontent.com/screaming-in-space/agent-tools/main/install.sh) --global
 ```
+
+This installs skills into `~/.claude/skills/` so they're available in every repo.
 
 ### Update
 
-Re-run the install script or manual curl to pull the latest versions. Existing files are overwritten.
+Re-run the install command. Existing files are overwritten with the latest versions.
 
 ## Usage
 
@@ -41,18 +41,6 @@ Once installed, skills are available as slash commands in any Claude Code sessio
 ```
 /agentify
 ```
-
-## Adding Skills to a Specific Project
-
-If you want skills scoped to a single repo instead of globally:
-
-```bash
-mkdir -p .claude/skills/agentify
-curl -fsSL https://raw.githubusercontent.com/screaming-in-space/agent-tools/main/.claude/skills/agentify/SKILL.md \
-  -o .claude/skills/agentify/SKILL.md
-```
-
-Then commit `.claude/skills/` to your repo.
 
 ## Contributing
 
