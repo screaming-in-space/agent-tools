@@ -9,7 +9,7 @@ if [ "${1:-}" = "--global" ]; then
   DEST="$HOME/.claude/skills"
   echo "Installing Claude skills globally (~/.claude/skills)..."
 else
-  DEST=".claude/skills"
+  DEST="$(pwd)/.claude/skills"
   echo "Installing Claude skills into current repo (.claude/skills)..."
 fi
 
