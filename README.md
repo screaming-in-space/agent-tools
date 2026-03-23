@@ -34,6 +34,8 @@ Re-run the install script or manual curl to pull the latest versions. Existing f
 
 ## Usage
 
+**Note:** After installing or updating skills, restart Claude Code (terminal or desktop app) for new skills to register.
+
 Once installed, skills are available as slash commands in any Claude Code session:
 
 ```
