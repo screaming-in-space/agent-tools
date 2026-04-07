@@ -1,8 +1,23 @@
-# Agent Tools — Shared Claude Skills
+# Agent Tools
 
-A collection of reusable [Claude Code](https://claude.ai/claude-code) skills for bootstrapping and maintaining AI-assisted repositories.
+Shared [Claude Code](https://claude.ai/claude-code) skills and standalone .NET agents for AI-assisted development workflows.
 
-## Available Skills
+## Agents
+
+| Agent | Description |
+|-------|-------------|
+| [`ContextCartographer`](agents/src/ContextCartographer/) | Scans a markdown directory and produces a structured context map (CONTEXT.md) using M.E.AI tool calling |
+
+### Running an agent
+
+```bash
+cd agents/src/ContextCartographer
+dotnet run -- <directory-path> [--endpoint <url>] [--model <name>]
+```
+
+Requires .NET 10 SDK and an OpenAI-compatible endpoint (e.g., [LM Studio](https://lmstudio.ai) at `http://localhost:1234/v1`).
+
+## Skills
 
 | Skill | Description |
 |-------|-------------|

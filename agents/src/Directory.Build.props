@@ -1,0 +1,21 @@
+<Project>
+
+  <!-- Versioning -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!-- Shared project settings -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- Auto-import test infrastructure for *.Tests projects -->
+  <Import Project="$(MSBuildThisFileDirectory)Test.Build.props"
+          Condition="$(MSBuildProjectName.EndsWith('.Tests'))" />
+
+</Project>
