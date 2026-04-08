@@ -11,7 +11,8 @@ One developer. Minimal dependencies. Each agent should try and be self-contained
 ## Philosophy
 
 - Build on Microsoft.Extensions.AI abstractions (`IChatClient`, `AIFunctionFactory`) — not framework-level orchestration.
-- Each agent should try to be a single console app. No shared host, no DI container, no Aspire orchestration
+- Each agent is a standalone console app. No shared host, no DI container, no Aspire orchestration.
+- **Agent.SDK** is the one exception — shared logging bootstrap (`AgentLogging`) and telemetry primitives (`AgentTrace`, `ActivityExtensions`). Only pure plumbing goes here; agent-specific logic never belongs in the SDK.
 - At most, some type of storage or persistence layer will be allowed.
 - Tools are pure functions with `[Description]` attributes. The LLM dispatches; the tool executes.
 - System prompts are code — built by a static method, testable, parameterized.
@@ -37,4 +38,4 @@ All coding rules, conventions, and patterns live in docs:
 - Windows. Line endings: CRLF (`\r\n`).
 - .NET 10 SDK / C# 14.0.
 - Any OpenAI-compatible endpoint (LM Studio, Ollama, Azure OpenAI, OpenAI).
-- `dotnet run --project src/ContextCartographer -- <directory> [--endpoint <url>]`
+- `dotnet run --project src/CrimeSceneInvestigator -- <directory> [--endpoint <url>]`

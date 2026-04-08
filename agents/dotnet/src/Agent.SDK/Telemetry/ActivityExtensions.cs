@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace ContextCartographer.Telemetry;
+namespace Agent.SDK.Telemetry;
 
 /// <summary>
 /// Fluent extensions on <see cref="Activity"/>? for ergonomic span instrumentation.

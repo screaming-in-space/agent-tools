@@ -1,17 +1,17 @@
 using System.CommandLine;
 
-namespace ContextCartographer;
+namespace CrimeSceneInvestigator;
 
 /// <summary>
-/// System.CommandLine definitions for Context Cartographer.
+/// System.CommandLine definitions for an Agent.
 /// Argument, options, and root command assembly live here.
 /// The action delegates to <see cref="AgentInCommand.RunAsync"/>.
 /// </summary>
-public static class Commands
+public static class AgentCommandSetup
 {
     public static readonly Argument<DirectoryInfo> DirectoryArg = new("directory")
     {
-        Description = "The markdown directory to scan"
+        Description = "The markdown directory to investigate"
     };
 
     public static readonly Option<string?> EndpointOption = new("--endpoint")
@@ -37,9 +37,9 @@ public static class Commands
     /// <summary>
     /// Builds the root command with all arguments, options, and the action wired to <see cref="AgentInCommand.RunAsync"/>.
     /// </summary>
-    public static RootCommand CreateRootCommand()
+    public static RootCommand CreateRootCommand(Func<ParseResult, CancellationToken, Task<int>> action)
     {
-        var command = new RootCommand("Context Cartographer — Scan a markdown directory and produce a structured context map.")
+        var command = new RootCommand("Crime Scene Investigator — Scan a markdown directory and produce a structured context map.")
         {
             DirectoryArg,
             EndpointOption,
@@ -48,7 +48,7 @@ public static class Commands
             OutputOption,
         };
 
-        command.SetAction(AgentInCommand.RunAsync);
+        command.SetAction(action);
 
         return command;
     }

@@ -1,6 +1,6 @@
-using ContextCartographer.Tools;
+using CrimeSceneInvestigator.Tools;
 
-namespace ContextCartographer.Tests;
+namespace CrimeSceneInvestigator.Tests;
 
 public sealed class FileToolsTests : IDisposable
 {
@@ -8,7 +8,7 @@ public sealed class FileToolsTests : IDisposable
 
     public FileToolsTests()
     {
-        _root = Path.Combine(Path.GetTempPath(), $"cartographer-tests-{Guid.NewGuid():N}");
+        _root = Path.Combine(Path.GetTempPath(), $"csi-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
         FileTools.RootDirectory = _root;
     }

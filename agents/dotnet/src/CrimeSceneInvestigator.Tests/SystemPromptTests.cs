@@ -1,4 +1,4 @@
-namespace ContextCartographer.Tests;
+namespace CrimeSceneInvestigator.Tests;
 
 public sealed class SystemPromptTests
 {

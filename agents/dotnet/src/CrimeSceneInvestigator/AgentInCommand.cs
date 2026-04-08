@@ -1,55 +1,57 @@
 using System.ClientModel;
 using System.CommandLine;
 using System.Diagnostics;
-using ContextCartographer.Telemetry;
-using ContextCartographer.Tools;
+using Agent.SDK.Logging;
+using Agent.SDK.Telemetry;
+using CrimeSceneInvestigator.Telemetry;
+using CrimeSceneInvestigator.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 using Serilog;
 
-namespace ContextCartographer;
+namespace CrimeSceneInvestigator;
 
 /// <summary>
 /// Core agent logic: resolves CLI options, builds the M.E.AI pipeline, and
-/// runs the context-mapping agent. Called from the System.CommandLine action.
+/// runs the crime-scene investigation agent. Called from the System.CommandLine action.
 /// </summary>
-public static class AgentInCommand
+public record AgentInCommand(ILogger<AgentInCommand> logger)
 {
     /// <summary>
-    /// Runs the context cartographer agent with the parsed CLI values.
+    /// Runs the crime scene investigator agent with the parsed CLI values.
     /// Returns <c>0</c> on success, <c>1</c> on failure.
     /// </summary>
-    public static async Task<int> RunAsync(ParseResult parseResult, CancellationToken ct)
+    public async Task<int> RunAsync(ParseResult parseResult, CancellationToken ct)
     {
-        var directory = parseResult.GetValue(Commands.DirectoryArg)!;
+        var directory = parseResult.GetValue(AgentCommandSetup.DirectoryArg)!;
         var targetPath = directory.FullName;
 
         if (!directory.Exists)
         {
-            Log.Error("Directory '{TargetPath}' does not exist", targetPath);
+            logger.LogError("Directory '{TargetPath}' does not exist", targetPath);
             return 1;
         }
 
-        var endpoint = parseResult.GetValue(Commands.EndpointOption)
-            ?? Env("CARTOGRAPHER_ENDPOINT")
+        var endpoint = parseResult.GetValue(AgentCommandSetup.EndpointOption)
+            ?? Env("CSI_ENDPOINT")
             ?? "http://localhost:1234/v1";
 
-        var apiKey = parseResult.GetValue(Commands.ApiKeyOption)
-            ?? Env("CARTOGRAPHER_API_KEY")
+        var apiKey = parseResult.GetValue(AgentCommandSetup.ApiKeyOption)
+            ?? Env("CSI_API_KEY")
             ?? "no-key";
 
-        var model = parseResult.GetValue(Commands.ModelOption)
-            ?? Env("CARTOGRAPHER_MODEL")
+        var model = parseResult.GetValue(AgentCommandSetup.ModelOption)
+            ?? Env("CSI_MODEL")
             ?? "";
 
-        var outputPath = parseResult.GetValue(Commands.OutputOption)
+        var outputPath = parseResult.GetValue(AgentCommandSetup.OutputOption)
             ?? Path.Combine(targetPath, "CONTEXT.md");
 
-        Log.Information("Target:   {TargetPath}", targetPath);
-        Log.Information("Endpoint: {Endpoint}", endpoint);
-        Log.Information("Model:    {Model}", string.IsNullOrEmpty(model) ? "(server default)" : model);
-        Log.Information("Output:   {OutputPath}", outputPath);
+        logger.LogInformation("Target:   {TargetPath}", targetPath);
+        logger.LogInformation("Endpoint: {Endpoint}", endpoint);
+        logger.LogInformation("Model:    {Model}", string.IsNullOrEmpty(model) ? "(server default)" : model);
+        logger.LogInformation("Output:   {OutputPath}", outputPath);
 
         // ── Configure tools ─────────────────────────────────────────────
 
@@ -75,10 +77,10 @@ public static class AgentInCommand
             .GetChatClient(string.IsNullOrEmpty(model) ? "local" : model)
             .AsIChatClient();
 
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddSerilog());
+        using var loggerFactory = AgentLogging.CreateLoggerFactory();
 
         IChatClient agent = new ChatClientBuilder(chatClient)
-            .UseOpenTelemetry(loggerFactory, sourceName: CartographerTrace.Source.Name)
+            .UseOpenTelemetry(loggerFactory, sourceName: CsiTrace.Instance.Source.Name)
             .UseFunctionInvocation(loggerFactory, c => c.MaximumIterationsPerRequest = 50)
             .Build();
 
@@ -89,35 +91,34 @@ public static class AgentInCommand
 
         Log.Information("Running agent...");
 
-        using var span = CartographerTrace.StartSpan("agent-run", ActivityKind.Client);
-        span?.WithTag("cartographer.target", targetPath);
+        using var span = CsiTrace.Instance.StartSpan("agent-run", ActivityKind.Client);
+        span?.WithTag("csi.target", targetPath);
 
         try
         {
             var response = await agent.GetResponseAsync(
                 [
                     new ChatMessage(ChatRole.System, systemPrompt),
-                    new ChatMessage(ChatRole.User, $"Map the markdown files in: {targetPath}"),
+                    new ChatMessage(ChatRole.User, $"Investigate the markdown files in: {targetPath}"),
                 ],
                 new ChatOptions { Tools = tools },
                 ct);
 
             stopwatch.Stop();
-            CartographerMetrics.RunDuration.Record(stopwatch.Elapsed.TotalSeconds);
+            CsiMetrics.RunDuration.Record(stopwatch.Elapsed.TotalSeconds);
             span?.SetSuccess();
 
-            Log.Information("Agent completed in {Duration:F1}s", stopwatch.Elapsed.TotalSeconds);
+            logger.LogInformation("Agent completed in {Duration:F1}s", stopwatch.Elapsed.TotalSeconds);
             Console.WriteLine();
             Console.WriteLine(response.Text);
             Console.WriteLine();
-            Log.Information("Done. Output written to: {OutputPath}", outputPath);
-
+            logger.LogInformation("Done. Output written to: {OutputPath}", outputPath);
             return 0;
         }
         catch (Exception ex)
         {
             span?.RecordError(ex);
-            Log.Error(ex, "Agent run failed");
+            logger.LogError(ex, "Agent run failed");
             return 1;
         }
     }

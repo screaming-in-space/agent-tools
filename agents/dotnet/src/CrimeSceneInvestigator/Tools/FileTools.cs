@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace ContextCartographer.Tools;
+namespace CrimeSceneInvestigator.Tools;
 
 /// <summary>
 /// File system tools available to the agent. Each public static method becomes

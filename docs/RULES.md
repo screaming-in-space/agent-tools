@@ -20,10 +20,12 @@ These apply everywhere. No exceptions.
 
 - .NET 10 / C# 14.0 — `LangVersion` inherited from `Directory.Build.props`, nullable enabled, implicit usings
 - Central Package Management (`Directory.Packages.props`) — all NuGet versions pinned centrally
+- **Agent.SDK** — shared class library for logging bootstrap (`AgentLogging`) and telemetry primitives (`AgentTrace`, `ActivityExtensions`). The one exception to "one agent, one project".
 - Microsoft.Extensions.AI 10.4.1 / Microsoft.Extensions.AI.OpenAI 10.4.1
 - OpenAI SDK 2.10.0 (used for `OpenAIClient` + `ApiKeyCredential`)
 - System.CommandLine 3.0.0-preview.2 for CLI argument parsing
-- Serilog 4.3.1 + Serilog.Sinks.Console 6.1.1 for structured logging
+- Serilog 4.3.1 + Serilog.Sinks.Console 6.1.1 + Serilog.Settings.Configuration 10.0.0 for structured logging
+- Microsoft.Extensions.Configuration.Json 10.0.5 for `appsettings.json` loading
 - `System.Diagnostics.ActivitySource` / `System.Diagnostics.Metrics.Meter` for telemetry (BCL, no OTel SDK export for CLI)
 - xUnit 2.9.3 + NSubstitute 5.3.0 for testing
 - No DI container — agents are console apps with manual wiring
@@ -63,21 +65,29 @@ These apply everywhere. No exceptions.
 Each agent follows the same structure:
 
 ```
-1. Define CLI (RootCommand + Argument + Options via System.CommandLine)
-2. SetAction with async handler (ParseResult, CancellationToken)
-3. Inside the action:
-   a. Resolve options, fall back to environment variables
+1. Program.cs (thin bootstrap):
+   a. Build IConfiguration from appsettings.json
+   b. AgentLogging.Configure(configuration) — Serilog reads overrides from config
+   c. Create ILoggerFactory + ILogger<AgentInCommand>
+   d. Instantiate AgentInCommand(logger)
+   e. AgentCommandSetup.CreateRootCommand(agent.RunAsync).Parse(args).InvokeAsync()
+   f. Log.CloseAndFlushAsync() in finally
+
+2. AgentCommandSetup.cs (CLI definitions):
+   a. Positional Argument<DirectoryInfo> + named Option<string?> fields
+   b. CreateRootCommand(action) — accepts the handler delegate, wires SetAction
+
+3. AgentInCommand.cs (domain logic — record with ILogger<T>):
+   a. Resolve options from ParseResult, fall back to environment variables
    b. Configure tools (set root directories, validate inputs)
    c. Build IChatClient pipeline (OpenAIClient → ChatClient → ChatClientBuilder)
    d. Build system prompt (static method, parameterized)
    e. Call agent.GetResponseAsync with system + user messages + CancellationToken
    f. Return exit code (0 = success, 1 = failure)
-4. Configure Serilog static logger
-5. rootCommand.Parse(args).Invoke() — delegates help, version, and error handling to System.CommandLine
-6. Log.CloseAndFlushAsync() in finally
 ```
 
 - No `IHost`, no `IServiceProvider`, no `Program.CreateBuilder()`. Top-level statements with manual wiring.
+- `AgentInCommand` is a `record` with `ILogger<T>` via primary constructor — categorical logging, not static `Log.*`.
 - Positional `Argument<DirectoryInfo>` for the required input, `Option<string?>` for named options.
 - Environment variables as fallback, not primary configuration.
 - System.CommandLine handles `--help`, `--version`, and parse error reporting automatically.
@@ -137,18 +147,26 @@ Use a shared `ResolveSafePath` helper. Never inline path validation.
 
 ### Serilog for Structured Console Output
 
-- Configure `Log.Logger` as a static Serilog logger in the top-level statements, before `rootCommand.Parse(args).Invoke()`.
+- Call `AgentLogging.Configure(configuration)` from Agent.SDK — bootstraps `Log.Logger` with the standard output template and reads overrides from `IConfiguration`.
 - Use the `[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}` output template (matches continuum-engine convention).
 - Use `AnsiConsoleTheme.Code` for colored terminal output.
-- Override noisy sources: `.MinimumLevel.Override("System.Net.Http", LogEventLevel.Warning)`.
+- **Log-level overrides live in `appsettings.json`**, not hardcoded in bootstrap. Silence noisy sources via the `Serilog:MinimumLevel:Override` section.
 - Always `await Log.CloseAndFlushAsync()` in a `finally` block to ensure buffered logs are flushed.
-- Use structured log properties (`Log.Information("Target: {TargetPath}", path)`) — not string interpolation.
+- Use structured log properties (`logger.LogInformation("Target: {TargetPath}", path)`) — not string interpolation.
 
-### ILoggerFactory Bridge
+### Configuration-driven overrides (`appsettings.json`)
 
-- Create `LoggerFactory.Create(builder => builder.AddSerilog())` inside the action to bridge Serilog to `Microsoft.Extensions.Logging.ILoggerFactory`.
-- Pass this to `UseOpenTelemetry` and `UseFunctionInvocation` on the `ChatClientBuilder` pipeline.
-- Wrap in `using` — the factory is disposed when the action completes.
+- Build `IConfiguration` from `appsettings.json` in `Program.cs` using `ConfigurationBuilder`.
+- Set `AppContext.BaseDirectory` as the base path so the file is found alongside the published binary.
+- Mark `appsettings.json` as `<Content CopyToOutputDirectory="PreserveNewest" />` in the csproj.
+- The `Serilog` section in `appsettings.json` drives `ReadFrom.Configuration` — no recompile needed to tune log levels.
+
+### Categorical ILogger<T>
+
+- `AgentInCommand` receives `ILogger<AgentInCommand>` via primary constructor — log entries carry the source context for filtering.
+- Create the `ILoggerFactory` in `Program.cs` from `AgentLogging.CreateLoggerFactory()` and resolve typed loggers from it.
+- The same factory (or a second one created inside the action) is passed to `UseOpenTelemetry` and `UseFunctionInvocation` on the `ChatClientBuilder` pipeline.
+- Wrap in `using` — the factory is disposed when the program exits.
 
 ---
 
@@ -158,24 +176,26 @@ Use a shared `ResolveSafePath` helper. Never inline path validation.
 
 Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.Diagnostics.Metrics.Meter`). No OpenTelemetry SDK export packages — agents are short-lived CLI tools where export overhead isn't justified.
 
-### Trace: `CartographerTrace`
+### Trace: Agent.SDK `AgentTrace` + agent-specific wrapper
 
-- Static `ActivitySource` named `"ContextCartographer"`.
+- `AgentTrace(string sourceName)` is an instance-based `ActivitySource` factory in Agent.SDK. Each agent creates one with its own source name.
+- Agent wraps it in a static accessor: e.g., `CsiTrace.Instance` is `new AgentTrace("CrimeSceneInvestigator")`.
 - `StartSpan(name, kind, tags)` returns `Activity?` — null when no listener is attached (zero overhead).
-- Wrap agent runs in `using var span = CartographerTrace.StartSpan("agent-run", ActivityKind.Client)`.
+- Wrap agent runs in `using var span = CsiTrace.Instance.StartSpan("agent-run", ActivityKind.Client)`.
 - Use `ActivityExtensions` for null-safe fluent tagging: `span?.WithTag("key", value)`, `span?.SetSuccess()`, `span?.RecordError(ex)`.
 
-### Metrics: `CartographerMetrics`
+### Metrics: agent-specific `Meter`
 
-- Static `Meter` named `"ContextCartographer"`.
-- Pre-defined counters: `FilesDiscovered`, `FilesRead`, `ToolInvocations`.
+- Each agent defines its own static `Meter` (e.g., `CsiMetrics` with `"CrimeSceneInvestigator"`).
+- Pre-defined counters: `FilesDiscovered`, `FilesRead`, `ToolInvocations` (prefixed per agent, e.g., `csi.*`).
 - Pre-defined histogram: `RunDuration` (seconds).
 - Record metrics at the point of action — don't batch.
 
-### ActivityExtensions
+### ActivityExtensions (Agent.SDK)
 
 - Null-safe fluent extensions on `Activity?`: `WithTag`, `RecordError`, `SetSuccess`.
-- Borrowed directly from `Continuum.Telemetry.ActivityExtensions`.
+- Lives in Agent.SDK — shared by all agents.
+- Borrowed from `Continuum.Telemetry.ActivityExtensions`.
 - All methods return `Activity?` for chaining.
 
 ---
@@ -238,22 +258,29 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 
 ## Naming
 
-- Agent project names: `PascalCase` (e.g., `ContextCartographer`)
+- Agent project names: `PascalCase` (e.g., `CrimeSceneInvestigator`)
+- Shared library: `Agent.SDK` — the only non-agent project
 - Tool classes: `[Domain]Tools` (e.g., `FileTools`)
 - System prompt class: `SystemPrompt` with a static `Build` method
+- Agent domain class: `AgentInCommand` — record with `ILogger<AgentInCommand>`
+- CLI setup class: `AgentCommandSetup` — static factory for `RootCommand`
 - CLI argument names: `--kebab-case` (e.g., `--api-key`, `--endpoint`)
-- Environment variable names: `AGENTNAME_SETTING` (e.g., `CARTOGRAPHER_ENDPOINT`)
+- Environment variable names: `SHORTNAME_SETTING` (e.g., `CSI_ENDPOINT`, `CSI_API_KEY`)
 - Test projects: `[AgentName].Tests`
 
 ---
 
 ## Adding a New Agent
 
-1. Create `src/NewAgent/NewAgent.csproj` — reference M.E.AI packages without versions (CPM owns them).
+1. Create `src/NewAgent/NewAgent.csproj` — `<ProjectReference>` to Agent.SDK, plus M.E.AI packages without versions (CPM owns them).
 2. Add any new package versions to `src/Directory.Packages.props`.
-3. Create `src/NewAgent/Tools/` — static tool class with `[Description]` methods.
-4. Create `src/NewAgent/SystemPrompt.cs` — static `Build` method returning the system prompt string.
-5. Create `src/NewAgent/Program.cs` — top-level statements following the console app pattern.
-6. Create `src/NewAgent.Tests/NewAgent.Tests.csproj` — only needs `<ProjectReference>` to the agent. Test infrastructure is auto-imported.
-7. Update `docs/STRUCTURE.md` with the new agent entry.
-8. Update `README.md` with quick-start instructions.
+3. Create `src/NewAgent/appsettings.json` — Serilog overrides, `<Content CopyToOutputDirectory="PreserveNewest" />`.
+4. Create `src/NewAgent/Program.cs` — thin bootstrap: build `IConfiguration`, `AgentLogging.Configure`, create `AgentInCommand` with `ILogger<T>`, invoke CLI.
+5. Create `src/NewAgent/AgentCommandSetup.cs` — `RootCommand` factory accepting the action delegate.
+6. Create `src/NewAgent/AgentInCommand.cs` — record with `ILogger<AgentInCommand>`, domain logic in `RunAsync`.
+7. Create `src/NewAgent/Tools/` — static tool class with `[Description]` methods.
+8. Create `src/NewAgent/SystemPrompt.cs` — static `Build` method returning the system prompt string.
+9. Create `src/NewAgent/Telemetry/` — agent-specific `AgentTrace` instance + `Meter` class.
+10. Create `src/NewAgent.Tests/NewAgent.Tests.csproj` — only needs `<ProjectReference>` to the agent. Test infrastructure is auto-imported.
+11. Update `docs/STRUCTURE.md` with the new agent entry.
+12. Update `README.md` with quick-start instructions.
