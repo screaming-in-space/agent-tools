@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 
 var configuration = new ConfigurationBuilder()
-    .SetBasePath(AppContext.BaseDirectory)
+    .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
     .Build();
 
@@ -14,7 +14,7 @@ using var loggerFactory = AgentLogging.CreateLoggerFactory();
 
 try
 {
-    var agent = new AgentInCommand(loggerFactory.CreateLogger<AgentInCommand>());
+    var agent = new AgentInCommand(loggerFactory.CreateLogger<AgentInCommand>(), configuration);
 
     return await AgentCommandSetup
         .CreateRootCommand(agent.RunAsync)

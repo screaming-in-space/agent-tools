@@ -14,19 +14,9 @@ public static class AgentCommandSetup
         Description = "The markdown directory to investigate"
     };
 
-    public static readonly Option<string?> EndpointOption = new("--endpoint")
+    public static readonly Option<string?> ConfigKeyOption = new("--config-key")
     {
-        Description = "OpenAI-compatible endpoint (default: http://localhost:1234/v1)"
-    };
-
-    public static readonly Option<string?> ApiKeyOption = new("--api-key")
-    {
-        Description = "API key (default: none — works with LM Studio)"
-    };
-
-    public static readonly Option<string?> ModelOption = new("--model")
-    {
-        Description = "Model identifier (default: use server default)"
+        Description = "Model configuration key in appsettings.json under Models:{key} (default: \"default\")"
     };
 
     public static readonly Option<string?> OutputOption = new("--output")
@@ -42,9 +32,7 @@ public static class AgentCommandSetup
         var command = new RootCommand("Crime Scene Investigator — Scan a markdown directory and produce a structured context map.")
         {
             DirectoryArg,
-            EndpointOption,
-            ApiKeyOption,
-            ModelOption,
+            ConfigKeyOption,
             OutputOption,
         };
 

@@ -2,6 +2,7 @@ using CrimeSceneInvestigator.Tools;
 
 namespace CrimeSceneInvestigator.Tests;
 
+[Collection("FileTools")]
 public sealed class FileToolsTests : IDisposable
 {
     private readonly string _root;

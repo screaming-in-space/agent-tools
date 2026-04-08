@@ -66,30 +66,32 @@ Each agent follows the same structure:
 
 ```
 1. Program.cs (thin bootstrap):
-   a. Build IConfiguration from appsettings.json
+   a. Build IConfiguration from appsettings.json (base path: CWD)
    b. AgentLogging.Configure(configuration) — Serilog reads overrides from config
    c. Create ILoggerFactory + ILogger<AgentInCommand>
-   d. Instantiate AgentInCommand(logger)
+   d. Instantiate AgentInCommand(logger, configuration)
    e. AgentCommandSetup.CreateRootCommand(agent.RunAsync).Parse(args).InvokeAsync()
    f. Log.CloseAndFlushAsync() in finally
 
 2. AgentCommandSetup.cs (CLI definitions):
    a. Positional Argument<DirectoryInfo> + named Option<string?> fields
-   b. CreateRootCommand(action) — accepts the handler delegate, wires SetAction
+   b. --config-key selects Models:{key} section from appsettings.json (default: "default")
+   c. CreateRootCommand(action) — accepts the handler delegate, wires SetAction
 
-3. AgentInCommand.cs (domain logic — record with ILogger<T>):
-   a. Resolve options from ParseResult, fall back to environment variables
-   b. Configure tools (set root directories, validate inputs)
-   c. Build IChatClient pipeline (OpenAIClient → ChatClient → ChatClientBuilder)
-   d. Build system prompt (static method, parameterized)
-   e. Call agent.GetResponseAsync with system + user messages + CancellationToken
-   f. Return exit code (0 = success, 1 = failure)
+3. AgentInCommand.cs (domain logic — record with ILogger<T> + IConfiguration):
+   a. SetupAsync — resolves CLI options, binds AgentModelOptions from config,
+      validates endpoint via EndpointHealthCheck, registers tools,
+      returns AgentContext or exit code 1 on failure
+   b. RunAsync — calls SetupAsync, builds IChatClient pipeline,
+      builds system prompt, calls GetResponseAsync, returns exit code
 ```
 
 - No `IHost`, no `IServiceProvider`, no `Program.CreateBuilder()`. Top-level statements with manual wiring.
-- `AgentInCommand` is a `record` with `ILogger<T>` via primary constructor — categorical logging, not static `Log.*`.
-- Positional `Argument<DirectoryInfo>` for the required input, `Option<string?>` for named options.
-- Environment variables as fallback, not primary configuration.
+- `AgentInCommand` is a `record` with `ILogger<T>` + `IConfiguration` via primary constructor.
+- `SetupAsync` handles CLI resolution, config binding, health check, and tool registration. Returns an `AgentContext` record or early-exit code.
+- `RunAsync` consumes the context: builds pipeline, runs agent, returns exit code.
+- `--config-key` selects a `Models:{key}` section from `appsettings.json`. Model options (endpoint, apiKey, model) are bound via `AgentModelOptions.Resolve`.
+- `EndpointHealthCheck.ValidateAsync` calls `GET /v1/models` before building the pipeline — fail fast if the endpoint is down or the model isn't loaded.
 - System.CommandLine handles `--help`, `--version`, and parse error reporting automatically.
 
 ### System Prompts
@@ -157,9 +159,10 @@ Use a shared `ResolveSafePath` helper. Never inline path validation.
 ### Configuration-driven overrides (`appsettings.json`)
 
 - Build `IConfiguration` from `appsettings.json` in `Program.cs` using `ConfigurationBuilder`.
-- Set `AppContext.BaseDirectory` as the base path so the file is found alongside the published binary.
+- Set `Directory.GetCurrentDirectory()` as the base path so agents find config relative to where they run.
 - Mark `appsettings.json` as `<Content CopyToOutputDirectory="PreserveNewest" />` in the csproj.
 - The `Serilog` section in `appsettings.json` drives `ReadFrom.Configuration` — no recompile needed to tune log levels.
+- The `Models` section in `appsettings.json` holds named model configurations (`Models:default`, `Models:embedding`, etc.).
 
 ### Categorical ILogger<T>
 
