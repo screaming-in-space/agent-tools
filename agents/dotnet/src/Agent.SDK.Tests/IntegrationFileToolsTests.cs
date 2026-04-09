@@ -1,6 +1,6 @@
-using CrimeSceneInvestigator.Tools;
+using Agent.SDK.Tools;
 
-namespace CrimeSceneInvestigator.Tests;
+namespace Agent.SDK.Tests;
 
 /// <summary>
 /// Integration tests that run <see cref="FileTools"/> against the real

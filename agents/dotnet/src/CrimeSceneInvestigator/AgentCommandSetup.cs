@@ -24,16 +24,22 @@ public static class AgentCommandSetup
         Description = "Output file path (default: CONTEXT.md in target directory)"
     };
 
+    public static readonly Option<bool> HeadlessOption = new("--headless")
+    {
+        Description = "Disable rich terminal UI and use plain log output"
+    };
+
     /// <summary>
     /// Builds the root command with all arguments, options, and the action wired to <see cref="AgentInCommand.RunAsync"/>.
     /// </summary>
     public static RootCommand CreateRootCommand(Func<ParseResult, CancellationToken, Task<int>> action)
     {
-        var command = new RootCommand("Crime Scene Investigator — Scan a markdown directory and produce a structured context map.")
+        var command = new RootCommand("Crime Scene Investigator - Scan a markdown directory and produce a structured context map.")
         {
             DirectoryArg,
             ConfigKeyOption,
             OutputOption,
+            HeadlessOption,
         };
 
         command.SetAction(action);

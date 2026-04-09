@@ -6,14 +6,16 @@ Shared [Claude Code](https://claude.ai/claude-code) skills and standalone .NET a
 
 | Agent | Description |
 |-------|-------------|
-| [`ContextCartographer`](agents/src/ContextCartographer/) | Scans a markdown directory and produces a structured context map (CONTEXT.md) using M.E.AI tool calling |
+| [`CrimeSceneInvestigator`](agents/dotnet/src/CrimeSceneInvestigator/) | Scans a markdown directory and produces a structured context map (CONTEXT.md) using M.E.AI tool calling |
 
 ### Running an agent
 
 ```bash
-cd agents/src/ContextCartographer
-dotnet run -- <directory-path> [--endpoint <url>] [--model <name>]
+cd agents/dotnet
+dotnet run --project src/CrimeSceneInvestigator -- <directory-path> [--config-key <key>] [--output <path>]
 ```
+
+Model configuration (endpoint, API key, model name) lives in `appsettings.json` under `Models:{key}`. The `--config-key` flag selects which section to use (default: `"default"`).
 
 Requires .NET 10 SDK and an OpenAI-compatible endpoint (e.g., [LM Studio](https://lmstudio.ai) at `http://localhost:1234/v1`).
 

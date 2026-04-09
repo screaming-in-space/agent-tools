@@ -30,6 +30,15 @@ public sealed record AgentModelOptions
     /// </summary>
     public string Model { get; init; } = "";
 
+    /// <summary>Sampling temperature (0.0 = deterministic, 2.0 = maximum randomness). Null uses server default.</summary>
+    public float? Temperature { get; init; }
+
+    /// <summary>Nucleus sampling cutoff (0.0-1.0). Null uses server default.</summary>
+    public float? TopP { get; init; }
+
+    /// <summary>Maximum tokens in the completion response. Null uses server default.</summary>
+    public int? MaxOutputTokens { get; init; }
+
     /// <summary>
     /// Resolves model options from a named <c>Models:{configKey}</c> section in configuration.
     /// Properties not specified in config retain their defaults.
@@ -45,8 +54,6 @@ public sealed record AgentModelOptions
         var key = string.IsNullOrWhiteSpace(configKey) ? DefaultKey : configKey;
         var section = configuration.GetSection($"{SectionPrefix}:{key}");
 
-        var options = new AgentModelOptions();
-        section.Bind(options);
-        return options;
+        return section.Get<AgentModelOptions>() ?? new AgentModelOptions();
     }
 }

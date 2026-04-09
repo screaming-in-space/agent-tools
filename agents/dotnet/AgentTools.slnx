@@ -17,6 +17,7 @@
     <File Path="../../docs/STRUCTURE.md" />
   </Folder>
   <Project Path="src/Agent.SDK/Agent.SDK.csproj" />
+  <Project Path="src/Agent.SDK.Tests/Agent.SDK.Tests.csproj" />
   <Project Path="src/CrimeSceneInvestigator.Tests/CrimeSceneInvestigator.Tests.csproj" />
   <Project Path="src/CrimeSceneInvestigator/CrimeSceneInvestigator.csproj" />
 </Solution>

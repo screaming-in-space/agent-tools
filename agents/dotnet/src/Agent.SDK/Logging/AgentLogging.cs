@@ -20,15 +20,22 @@ public static class AgentLogging
     /// Call once at startup, before any logging.
     /// When <paramref name="configuration"/> is provided, Serilog reads overrides
     /// (e.g. minimum level per namespace) from the <c>Serilog</c> section.
+    /// Set <paramref name="suppressConsole"/> to <c>true</c> in interactive mode
+    /// to prevent Serilog output from interfering with Spectre.Console live rendering.
     /// </summary>
     public static void Configure(
         IConfiguration? configuration = null,
-        LogEventLevel minimumLevel = LogEventLevel.Information)
+        LogEventLevel minimumLevel = LogEventLevel.Information,
+        bool suppressConsole = false)
     {
         var builder = new LoggerConfiguration()
             .MinimumLevel.Is(minimumLevel)
-            .Enrich.FromLogContext()
-            .WriteTo.Console(outputTemplate: OutputTemplate, theme: AnsiConsoleTheme.Code);
+            .Enrich.FromLogContext();
+
+        if (!suppressConsole)
+        {
+            builder.WriteTo.Console(outputTemplate: OutputTemplate, theme: AnsiConsoleTheme.Code);
+        }
 
         if (configuration is not null)
         {

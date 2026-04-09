@@ -1,6 +1,6 @@
-using CrimeSceneInvestigator.Tools;
+using Agent.SDK.Tools;
 
-namespace CrimeSceneInvestigator.Tests;
+namespace Agent.SDK.Tests;
 
 [Collection("FileTools")]
 public sealed class FileToolsTests : IDisposable
@@ -9,7 +9,7 @@ public sealed class FileToolsTests : IDisposable
 
     public FileToolsTests()
     {
-        _root = Path.Combine(Path.GetTempPath(), $"csi-tests-{Guid.NewGuid():N}");
+        _root = Path.Combine(Path.GetTempPath(), $"sdk-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
         FileTools.RootDirectory = _root;
     }
@@ -186,6 +186,30 @@ public sealed class FileToolsTests : IDisposable
         Assert.DoesNotContain("Frontmatter", result);
     }
 
+    [Fact]
+    public void ExtractStructure_IgnoresHeadingsInsideCodeBlocks()
+    {
+        var content = "# Real Heading\n\n```\n# Not a heading\n## Also not\n```\n\n## Another Real";
+
+        var result = FileTools.ExtractStructure(content);
+
+        Assert.Contains("# Real Heading", result);
+        Assert.Contains("## Another Real", result);
+        Assert.DoesNotContain("Not a heading", result);
+        Assert.DoesNotContain("Also not", result);
+    }
+
+    [Fact]
+    public void ExtractStructure_IgnoresLinksInsideCodeSpans()
+    {
+        var content = "See `[not a link](https://fake.com)` and [real](https://real.com)";
+
+        var result = FileTools.ExtractStructure(content);
+
+        Assert.Contains("https://real.com", result);
+        Assert.DoesNotContain("https://fake.com", result);
+    }
+
     // ── WriteOutput ──
 
     [Fact]
@@ -213,6 +237,33 @@ public sealed class FileToolsTests : IDisposable
         var result = FileTools.WriteOutput("../../evil.md", "bad");
 
         Assert.StartsWith("Error:", result);
+    }
+
+    // ── ResolveSafePath ──
+
+    [Fact]
+    public void ResolveSafePath_RelativePath_ResolvesWithinRoot()
+    {
+        var result = FileTools.ResolveSafePath("docs/file.md");
+
+        Assert.NotNull(result);
+        Assert.StartsWith(_root, result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveSafePath_TraversalAttempt_ReturnsNull()
+    {
+        var result = FileTools.ResolveSafePath("../../../etc/passwd");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ResolveSafePath_EmptyString_ReturnsNull()
+    {
+        var result = FileTools.ResolveSafePath("");
+
+        Assert.Null(result);
     }
 
     // ── Helpers ──

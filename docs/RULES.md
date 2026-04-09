@@ -8,19 +8,20 @@ Technical constraints, agent patterns, and rejected patterns for agent-tools.
 
 These apply everywhere. No exceptions.
 
-- **Single Responsibility** — one agent, one job. One tool, one side effect. One class, one reason to change.
-- **DRY** — one code path to each concern. If argument parsing exists in two places, one will drift.
-- **KISS** — the simplest correct solution. If a static method works, don't introduce a service class.
-- **YAGNI** — don't build it until you need it. Don't add DI, hosting, or Aspire until the agent genuinely requires them.
-- **Explicit over clever** — static methods, direct file I/O, raw string building. No hidden behavior.
+- **Single Responsibility** - one agent, one job. One tool, one side effect. One class, one reason to change.
+- **DRY** - one code path to each concern. If argument parsing exists in two places, one will drift.
+- **KISS** - the simplest correct solution. If a static method works, don't introduce a service class.
+- **YAGNI** - don't build it until you need it. Don't add DI, hosting, or Aspire until the agent genuinely requires them.
+- **Explicit over clever** - static methods, direct file I/O, raw string building. No hidden behavior.
 
 ---
 
 ## Stack
 
-- .NET 10 / C# 14.0 — `LangVersion` inherited from `Directory.Build.props`, nullable enabled, implicit usings
-- Central Package Management (`Directory.Packages.props`) — all NuGet versions pinned centrally
-- **Agent.SDK** — shared class library for logging bootstrap (`AgentLogging`) and telemetry primitives (`AgentTrace`, `ActivityExtensions`). The one exception to "one agent, one project".
+- .NET 10 / C# 14.0 - `LangVersion` inherited from `Directory.Build.props`, nullable enabled, implicit usings
+- Central Package Management (`Directory.Packages.props`) - all NuGet versions pinned centrally
+- **Agent.SDK** - shared class library for logging bootstrap (`AgentLogging`), telemetry primitives (`AgentTrace`, `ActivityExtensions`), model configuration (`AgentModelOptions`), endpoint health checks (`EndpointHealthCheck`), and reusable file-system tools (`FileTools`). The one exception to "one agent, one project".
+- Markdig 1.1.2 for AST-based markdown parsing in `FileTools.ExtractStructure`
 - Microsoft.Extensions.AI 10.4.1 / Microsoft.Extensions.AI.OpenAI 10.4.1
 - OpenAI SDK 2.10.0 (used for `OpenAIClient` + `ApiKeyCredential`)
 - System.CommandLine 3.0.0-preview.2 for CLI argument parsing
@@ -28,8 +29,8 @@ These apply everywhere. No exceptions.
 - Microsoft.Extensions.Configuration.Json 10.0.5 for `appsettings.json` loading
 - `System.Diagnostics.ActivitySource` / `System.Diagnostics.Metrics.Meter` for telemetry (BCL, no OTel SDK export for CLI)
 - xUnit 2.9.3 + NSubstitute 5.3.0 for testing
-- No DI container — agents are console apps with manual wiring
-- No Aspire — agents run standalone against any OpenAI-compatible endpoint
+- No DI container - agents are console apps with manual wiring
+- No Aspire - agents run standalone against any OpenAI-compatible endpoint
 
 ---
 
@@ -37,8 +38,8 @@ These apply everywhere. No exceptions.
 
 ### Priority Order for AI Abstractions
 
-1. **Microsoft.Extensions.AI** (`IChatClient`, `AIFunctionFactory`, `ChatClientBuilder`) — first-party abstractions. Use for all LLM work.
-2. **OpenAI SDK** (`OpenAIClient`, `ApiKeyCredential`) — used only to create the underlying chat client. Never call OpenAI-specific APIs directly when M.E.AI abstractions exist.
+1. **Microsoft.Extensions.AI** (`IChatClient`, `AIFunctionFactory`, `ChatClientBuilder`) - first-party abstractions. Use for all LLM work.
+2. **OpenAI SDK** (`OpenAIClient`, `ApiKeyCredential`) - used only to create the underlying chat client. Never call OpenAI-specific APIs directly when M.E.AI abstractions exist.
 
 ### Do
 
@@ -46,8 +47,8 @@ These apply everywhere. No exceptions.
 - Pass a `LoggerFactory` created from Serilog to both `UseOpenTelemetry` and `UseFunctionInvocation`.
 - Set `MaximumIterationsPerRequest` to a reasonable bound (default 50) to prevent runaway tool loops.
 - Use `AIFunctionFactory.Create()` with static methods that have `[Description]` attributes.
-- Use `ChatOptions.Tools` to pass the tool array — tools are per-request, not per-client.
-- Pass model as `"local"` when no model is specified — `ChatClient` requires a non-null string, but LM Studio ignores it when only one model is loaded.
+- Use `ChatOptions.Tools` to pass the tool array - tools are per-request, not per-client.
+- Pass model as `"local"` when no model is specified - `ChatClient` requires a non-null string, but LM Studio ignores it when only one model is loaded.
 - Use `AsIChatClient()` to bridge from OpenAI's `ChatClient` to M.E.AI's `IChatClient`.
 
 ### Don't
@@ -66,8 +67,8 @@ Each agent follows the same structure:
 
 ```
 1. Program.cs (thin bootstrap):
-   a. Build IConfiguration from appsettings.json (base path: CWD)
-   b. AgentLogging.Configure(configuration) — Serilog reads overrides from config
+   a. Build IConfiguration from appsettings.json (base path: AppContext.BaseDirectory)
+   b. AgentLogging.Configure(configuration) - Serilog reads overrides from config
    c. Create ILoggerFactory + ILogger<AgentInCommand>
    d. Instantiate AgentInCommand(logger, configuration)
    e. AgentCommandSetup.CreateRootCommand(agent.RunAsync).Parse(args).InvokeAsync()
@@ -76,13 +77,13 @@ Each agent follows the same structure:
 2. AgentCommandSetup.cs (CLI definitions):
    a. Positional Argument<DirectoryInfo> + named Option<string?> fields
    b. --config-key selects Models:{key} section from appsettings.json (default: "default")
-   c. CreateRootCommand(action) — accepts the handler delegate, wires SetAction
+   c. CreateRootCommand(action) - accepts the handler delegate, wires SetAction
 
-3. AgentInCommand.cs (domain logic — record with ILogger<T> + IConfiguration):
-   a. SetupAsync — resolves CLI options, binds AgentModelOptions from config,
+3. AgentInCommand.cs (domain logic - record with ILogger<T> + IConfiguration):
+   a. SetupAsync - resolves CLI options, binds AgentModelOptions from config,
       validates endpoint via EndpointHealthCheck, registers tools,
       returns AgentContext or exit code 1 on failure
-   b. RunAsync — calls SetupAsync, builds IChatClient pipeline,
+   b. RunAsync - calls SetupAsync, builds IChatClient pipeline,
       builds system prompt, calls GetResponseAsync, returns exit code
 ```
 
@@ -90,28 +91,29 @@ Each agent follows the same structure:
 - `AgentInCommand` is a `record` with `ILogger<T>` + `IConfiguration` via primary constructor.
 - `SetupAsync` handles CLI resolution, config binding, health check, and tool registration. Returns an `AgentContext` record or early-exit code.
 - `RunAsync` consumes the context: builds pipeline, runs agent, returns exit code.
-- `--config-key` selects a `Models:{key}` section from `appsettings.json`. Model options (endpoint, apiKey, model) are bound via `AgentModelOptions.Resolve`.
-- `EndpointHealthCheck.ValidateAsync` calls `GET /v1/models` before building the pipeline — fail fast if the endpoint is down or the model isn't loaded.
+- `--config-key` selects a `Models:{key}` section from `appsettings.json`. Model options (endpoint, apiKey, model, temperature, topP, maxOutputTokens) are bound via `AgentModelOptions.Resolve`. Generation parameters are nullable - null means "use server default".
+- `EndpointHealthCheck.ValidateAsync` calls `GET /v1/models` before building the pipeline - fail fast if the endpoint is down or the model isn't loaded.
 - System.CommandLine handles `--help`, `--version`, and parse error reporting automatically.
 
 ### System Prompts
 
 - System prompts are built by a `static` method in a dedicated class (`SystemPrompt.Build`).
 - The method takes runtime parameters (paths, config) and returns a string.
-- System prompts are testable — unit tests verify they contain expected tool names, format specs, and paths.
+- System prompts are testable - unit tests verify they contain expected tool names, format specs, and paths.
 - The prompt defines the agent's workflow step-by-step: which tools to call, in what order, and what output format to produce.
 - Include the exact output format as a markdown template in the prompt.
 
 ### Tool Design
 
-- Tools are `public static` methods on a static class in a `Tools/` directory.
+- Reusable tools live in `Agent.SDK.Tools` (e.g., `FileTools`). Agent-specific tools live in the agent's own `Tools/` directory.
+- Tools are `public static` methods on a static class.
 - Each method has `[Description]` attributes on the method and every parameter.
-- Descriptions are the LLM's documentation — write them for an LLM reader, not a human.
-- Tools return `string` — the LLM needs text, not typed objects.
+- Descriptions are the LLM's documentation - write them for an LLM reader, not a human.
+- Tools return `string` - the LLM needs text, not typed objects.
 - Tools return error messages as strings (e.g., `"Error: file not found"`), not exceptions. The LLM can read and react to error strings; it cannot catch exceptions.
-- Tools that touch the file system must validate paths against a root directory. Use `Path.GetFullPath` + `StartsWith` to prevent directory traversal.
+- Tools that touch the file system must validate paths against a root directory via `FileTools.ResolveSafePath`.
 - Tools are registered via `AIFunctionFactory.Create(ToolClass.MethodName)`.
-- Keep tools deterministic where possible — same input, same output. No randomness, no timestamps in tool logic.
+- Keep tools deterministic where possible - same input, same output. No randomness, no timestamps in tool logic.
 
 ### Path Safety
 
@@ -122,7 +124,7 @@ Every tool that accepts a file path must:
 3. Verify the result starts with the root directory (case-insensitive on Windows).
 4. Return an error string if the path escapes the root.
 
-Use a shared `ResolveSafePath` helper. Never inline path validation.
+Use `FileTools.ResolveSafePath` from `Agent.SDK.Tools` - the canonical implementation. Never inline path validation.
 
 ---
 
@@ -134,13 +136,13 @@ Use a shared `ResolveSafePath` helper. Never inline path validation.
 - Use `Argument<T>` for positional required inputs (e.g., `Argument<DirectoryInfo>` for the target directory).
 - Use `Option<T?>` for named optional values. Nullable types signal "not provided".
 - Use the async `SetAction` overload: `(ParseResult, CancellationToken) => Task<int>`. Propagate the `CancellationToken` to all async work.
-- Let `rootCommand.Parse(args).Invoke()` handle help, version, and parse errors — don't reimplement.
+- Let `rootCommand.Parse(args).Invoke()` handle help, version, and parse errors - don't reimplement.
 - Return `0` for success, `1` for failure from the action.
 
 ### Don't
 
 - Don't mix manual `args` parsing with System.CommandLine. Let the library own the CLI contract.
-- Don't use `SetHandler` — that's v2 API. Use `SetAction` with `ParseResult` (v3 API).
+- Don't use `SetHandler` - that's v2 API. Use `SetAction` with `ParseResult` (v3 API).
 - Don't add subcommands unless the agent genuinely has multiple modes. Single-purpose agents use `RootCommand` directly.
 
 ---
@@ -149,27 +151,27 @@ Use a shared `ResolveSafePath` helper. Never inline path validation.
 
 ### Serilog for Structured Console Output
 
-- Call `AgentLogging.Configure(configuration)` from Agent.SDK — bootstraps `Log.Logger` with the standard output template and reads overrides from `IConfiguration`.
+- Call `AgentLogging.Configure(configuration)` from Agent.SDK - bootstraps `Log.Logger` with the standard output template and reads overrides from `IConfiguration`.
 - Use the `[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}` output template (matches continuum-engine convention).
 - Use `AnsiConsoleTheme.Code` for colored terminal output.
 - **Log-level overrides live in `appsettings.json`**, not hardcoded in bootstrap. Silence noisy sources via the `Serilog:MinimumLevel:Override` section.
 - Always `await Log.CloseAndFlushAsync()` in a `finally` block to ensure buffered logs are flushed.
-- Use structured log properties (`logger.LogInformation("Target: {TargetPath}", path)`) — not string interpolation.
+- Use structured log properties (`logger.LogInformation("Target: {TargetPath}", path)`) - not string interpolation.
 
 ### Configuration-driven overrides (`appsettings.json`)
 
 - Build `IConfiguration` from `appsettings.json` in `Program.cs` using `ConfigurationBuilder`.
-- Set `Directory.GetCurrentDirectory()` as the base path so agents find config relative to where they run.
-- Mark `appsettings.json` as `<Content CopyToOutputDirectory="PreserveNewest" />` in the csproj.
-- The `Serilog` section in `appsettings.json` drives `ReadFrom.Configuration` — no recompile needed to tune log levels.
-- The `Models` section in `appsettings.json` holds named model configurations (`Models:default`, `Models:embedding`, etc.).
+- Set `AppContext.BaseDirectory` as the base path so agents find config next to the binary (works with `dotnet run` and published single-file).
+- Mark `appsettings.json` as `<Content CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />` so it stays editable next to the .exe.
+- The `Serilog` section in `appsettings.json` drives `ReadFrom.Configuration` - no recompile needed to tune log levels.
+- The `Models` section holds named model configurations (`Models:default`, `Models:embedding`, etc.). Each section supports: `Endpoint`, `ApiKey`, `Model`, `Temperature`, `TopP`, `MaxOutputTokens`. Generation parameters are nullable - omit to use server defaults.
 
 ### Categorical ILogger<T>
 
-- `AgentInCommand` receives `ILogger<AgentInCommand>` via primary constructor — log entries carry the source context for filtering.
+- `AgentInCommand` receives `ILogger<AgentInCommand>` via primary constructor - log entries carry the source context for filtering.
 - Create the `ILoggerFactory` in `Program.cs` from `AgentLogging.CreateLoggerFactory()` and resolve typed loggers from it.
 - The same factory (or a second one created inside the action) is passed to `UseOpenTelemetry` and `UseFunctionInvocation` on the `ChatClientBuilder` pipeline.
-- Wrap in `using` — the factory is disposed when the program exits.
+- Wrap in `using` - the factory is disposed when the program exits.
 
 ---
 
@@ -177,13 +179,13 @@ Use a shared `ResolveSafePath` helper. Never inline path validation.
 
 ### ActivitySource + Meter (Borrowed from Continuum Engine)
 
-Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.Diagnostics.Metrics.Meter`). No OpenTelemetry SDK export packages — agents are short-lived CLI tools where export overhead isn't justified.
+Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.Diagnostics.Metrics.Meter`). No OpenTelemetry SDK export packages - agents are short-lived CLI tools where export overhead isn't justified.
 
 ### Trace: Agent.SDK `AgentTrace` + agent-specific wrapper
 
 - `AgentTrace(string sourceName)` is an instance-based `ActivitySource` factory in Agent.SDK. Each agent creates one with its own source name.
 - Agent wraps it in a static accessor: e.g., `CsiTrace.Instance` is `new AgentTrace("CrimeSceneInvestigator")`.
-- `StartSpan(name, kind, tags)` returns `Activity?` — null when no listener is attached (zero overhead).
+- `StartSpan(name, kind, tags)` returns `Activity?` - null when no listener is attached (zero overhead).
 - Wrap agent runs in `using var span = CsiTrace.Instance.StartSpan("agent-run", ActivityKind.Client)`.
 - Use `ActivityExtensions` for null-safe fluent tagging: `span?.WithTag("key", value)`, `span?.SetSuccess()`, `span?.RecordError(ex)`.
 
@@ -192,12 +194,12 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 - Each agent defines its own static `Meter` (e.g., `CsiMetrics` with `"CrimeSceneInvestigator"`).
 - Pre-defined counters: `FilesDiscovered`, `FilesRead`, `ToolInvocations` (prefixed per agent, e.g., `csi.*`).
 - Pre-defined histogram: `RunDuration` (seconds).
-- Record metrics at the point of action — don't batch.
+- Record metrics at the point of action - don't batch.
 
 ### ActivityExtensions (Agent.SDK)
 
 - Null-safe fluent extensions on `Activity?`: `WithTag`, `RecordError`, `SetSuccess`.
-- Lives in Agent.SDK — shared by all agents.
+- Lives in Agent.SDK - shared by all agents.
 - Borrowed from `Continuum.Telemetry.ActivityExtensions`.
 - All methods return `Activity?` for chaining.
 
@@ -223,13 +225,13 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 
 ## Build Infrastructure
 
-- **`Directory.Build.props`** — Centralized `net10.0`, nullable, implicit usings, `<Version>`. Do not duplicate in csproj files.
-- **`Directory.Packages.props`** — Central Package Management. All NuGet versions live here. Individual csproj files use `<PackageReference Include="..." />` without `Version`.
-- **`Test.Build.props`** — Auto-imported for `*.Tests` projects. Provides xUnit, NSubstitute, coverlet, Test SDK. Do not add test packages manually.
-- **`global.json`** — Pins .NET SDK version with `rollForward: latestMinor`.
-- **`.editorconfig`** — Enforces indent style, braces (`true:error`), file-scoped namespaces, `var` preference, using placement.
-- **`nuget.config`** — Package source mapping. Isolated from global feeds.
-- **Versioning** — Pure semver only (`0.1.0`). No pre-release suffixes.
+- **`Directory.Build.props`** - Centralized `net10.0`, nullable, implicit usings, `<Version>`. Do not duplicate in csproj files.
+- **`Directory.Packages.props`** - Central Package Management. All NuGet versions live here. Individual csproj files use `<PackageReference Include="..." />` without `Version`.
+- **`Test.Build.props`** - Auto-imported for `*.Tests` projects. Provides xUnit, NSubstitute, coverlet, Test SDK. Do not add test packages manually.
+- **`global.json`** - Pins .NET SDK version with `rollForward: latestMinor`.
+- **`.editorconfig`** - Enforces indent style, braces (`true:error`), file-scoped namespaces, `var` preference, using placement.
+- **`nuget.config`** - Package source mapping. Isolated from global feeds.
+- **Versioning** - Pure semver only (`0.1.0`). No pre-release suffixes.
 
 ---
 
@@ -240,7 +242,7 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 - **xUnit + NSubstitute.** `Assert.*` assertions. No FluentAssertions unless already present.
 - **One test class per production class.** `FileTools` → `FileToolsTests`, `SystemPrompt` → `SystemPromptTests`.
 - **Naming:** `MethodName_Condition_ExpectedBehavior` (e.g., `ListMarkdownFiles_EmptyDirectory_ReportsNone`).
-- **Test project:** `[AgentName].Tests` — auto-wired by `Test.Build.props`.
+- **Test project:** `[AgentName].Tests` - auto-wired by `Test.Build.props`.
 - **Setup/teardown:** Constructor + `IDisposable` for per-test state. No shared mutable state between tests.
 
 ### What to Test
@@ -262,11 +264,11 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 ## Naming
 
 - Agent project names: `PascalCase` (e.g., `CrimeSceneInvestigator`)
-- Shared library: `Agent.SDK` — the only non-agent project
+- Shared library: `Agent.SDK` - the only non-agent project
 - Tool classes: `[Domain]Tools` (e.g., `FileTools`)
 - System prompt class: `SystemPrompt` with a static `Build` method
-- Agent domain class: `AgentInCommand` — record with `ILogger<AgentInCommand>`
-- CLI setup class: `AgentCommandSetup` — static factory for `RootCommand`
+- Agent domain class: `AgentInCommand` - record with `ILogger<AgentInCommand>`
+- CLI setup class: `AgentCommandSetup` - static factory for `RootCommand`
 - CLI argument names: `--kebab-case` (e.g., `--api-key`, `--endpoint`)
 - Environment variable names: `SHORTNAME_SETTING` (e.g., `CSI_ENDPOINT`, `CSI_API_KEY`)
 - Test projects: `[AgentName].Tests`
@@ -275,15 +277,15 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 
 ## Adding a New Agent
 
-1. Create `src/NewAgent/NewAgent.csproj` — `<ProjectReference>` to Agent.SDK, plus M.E.AI packages without versions (CPM owns them).
+1. Create `src/NewAgent/NewAgent.csproj` - `<ProjectReference>` to Agent.SDK, plus M.E.AI packages without versions (CPM owns them).
 2. Add any new package versions to `src/Directory.Packages.props`.
-3. Create `src/NewAgent/appsettings.json` — Serilog overrides, `<Content CopyToOutputDirectory="PreserveNewest" />`.
-4. Create `src/NewAgent/Program.cs` — thin bootstrap: build `IConfiguration`, `AgentLogging.Configure`, create `AgentInCommand` with `ILogger<T>`, invoke CLI.
-5. Create `src/NewAgent/AgentCommandSetup.cs` — `RootCommand` factory accepting the action delegate.
-6. Create `src/NewAgent/AgentInCommand.cs` — record with `ILogger<AgentInCommand>`, domain logic in `RunAsync`.
-7. Create `src/NewAgent/Tools/` — static tool class with `[Description]` methods.
-8. Create `src/NewAgent/SystemPrompt.cs` — static `Build` method returning the system prompt string.
-9. Create `src/NewAgent/Telemetry/` — agent-specific `AgentTrace` instance + `Meter` class.
-10. Create `src/NewAgent.Tests/NewAgent.Tests.csproj` — only needs `<ProjectReference>` to the agent. Test infrastructure is auto-imported.
+3. Create `src/NewAgent/appsettings.json` - Serilog overrides, `<Content CopyToOutputDirectory="PreserveNewest" />`.
+4. Create `src/NewAgent/Program.cs` - thin bootstrap: build `IConfiguration`, `AgentLogging.Configure`, create `AgentInCommand` with `ILogger<T>`, invoke CLI.
+5. Create `src/NewAgent/AgentCommandSetup.cs` - `RootCommand` factory accepting the action delegate.
+6. Create `src/NewAgent/AgentInCommand.cs` - record with `ILogger<AgentInCommand>`, domain logic in `RunAsync`.
+7. Create `src/NewAgent/Tools/` - static tool class with `[Description]` methods.
+8. Create `src/NewAgent/SystemPrompt.cs` - static `Build` method returning the system prompt string.
+9. Create `src/NewAgent/Telemetry/` - agent-specific `AgentTrace` instance + `Meter` class.
+10. Create `src/NewAgent.Tests/NewAgent.Tests.csproj` - only needs `<ProjectReference>` to the agent. Test infrastructure is auto-imported.
 11. Update `docs/STRUCTURE.md` with the new agent entry.
 12. Update `README.md` with quick-start instructions.

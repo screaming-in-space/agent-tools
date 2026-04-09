@@ -4,7 +4,7 @@ namespace Agent.SDK.Telemetry;
 
 /// <summary>
 /// Fluent extensions on <see cref="Activity"/>? for ergonomic span instrumentation.
-/// All methods are null-safe — they no-op when the span is <c>null</c> (no listener attached).
+/// All methods are null-safe - they no-op when the span is <c>null</c> (no listener attached).
 /// </summary>
 public static class ActivityExtensions
 {
