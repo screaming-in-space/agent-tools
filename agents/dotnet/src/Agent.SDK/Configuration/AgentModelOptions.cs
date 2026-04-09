@@ -56,4 +56,28 @@ public sealed record AgentModelOptions
 
         return section.Get<AgentModelOptions>() ?? new AgentModelOptions();
     }
+
+    /// <summary>
+    /// Resolves all model configurations from the <c>Models</c> section.
+    /// Excludes keys whose model name contains "embed" (embedding models, not chat).
+    /// Returns a dictionary of config key → options.
+    /// </summary>
+    public static Dictionary<string, AgentModelOptions> ResolveAll(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(SectionPrefix);
+        var result = new Dictionary<string, AgentModelOptions>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var child in section.GetChildren())
+        {
+            var options = child.Get<AgentModelOptions>();
+            if (options is null) continue;
+
+            // Skip embedding models — they can't do chat/function calling
+            if (options.Model.Contains("embed", StringComparison.OrdinalIgnoreCase)) continue;
+
+            result[child.Key] = options;
+        }
+
+        return result;
+    }
 }

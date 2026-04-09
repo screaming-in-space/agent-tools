@@ -15,21 +15,27 @@ public sealed record AgentContext(
     IList<AITool> Tools,
     AgentScanOptions ScanOptions)
 {
-    public async Task<IChatClient> GetAgentClientAsync()
+    /// <summary>
+    /// Builds a chat client pipeline. Uses <paramref name="overrideOptions"/> when provided,
+    /// otherwise falls back to <see cref="ModelOptions"/> from the context.
+    /// </summary>
+    public async Task<IChatClient> GetAgentClientAsync(AgentModelOptions? overrideOptions = null)
     {
+        var options = overrideOptions ?? ModelOptions;
+
         var clientOptions = new OpenAIClientOptions
         {
-            Endpoint = new Uri(ModelOptions.Endpoint),
+            Endpoint = new Uri(options.Endpoint),
             // Local models can be slow — allow up to 10 minutes per streaming request.
             NetworkTimeout = TimeSpan.FromMinutes(10),
         };
-        var credential = new ApiKeyCredential(ModelOptions.ApiKey);
+        var credential = new ApiKeyCredential(options.ApiKey);
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
         // If model is empty, ChatClient requires a non-null model string.
         // LM Studio ignores the model field when only one model is loaded.
         var chatClient = openAiClient
-            .GetChatClient(string.IsNullOrEmpty(ModelOptions.Model) ? "local" : ModelOptions.Model)
+            .GetChatClient(string.IsNullOrEmpty(options.Model) ? "local" : options.Model)
             .AsIChatClient();
 
         using var loggerFactory = AgentLogging.CreateLoggerFactory();
