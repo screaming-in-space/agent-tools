@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="LibGit2Sharp" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />

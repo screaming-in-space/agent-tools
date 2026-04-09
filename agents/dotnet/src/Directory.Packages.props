@@ -12,6 +12,9 @@
     <PackageVersion Include="System.CommandLine" Version="3.0.0-preview.2.26159.112" />
     <!-- Markdown -->
     <PackageVersion Include="Markdig" Version="1.1.2" />
+    <!-- Code Analysis -->
+    <PackageVersion Include="LibGit2Sharp" Version="0.30.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
     <!-- Terminal UI -->
     <PackageVersion Include="Spectre.Console" Version="0.55.0" />
     <!-- Configuration -->

@@ -12,11 +12,17 @@ public sealed record AgentContext(
     string TargetPath,
     string OutputPath,
     AgentModelOptions ModelOptions,
-    IList<AITool> Tools)
+    IList<AITool> Tools,
+    AgentScanOptions ScanOptions)
 {
     public async Task<IChatClient> GetAgentClientAsync()
     {
-        var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(ModelOptions.Endpoint) };
+        var clientOptions = new OpenAIClientOptions
+        {
+            Endpoint = new Uri(ModelOptions.Endpoint),
+            // Local models can be slow — allow up to 10 minutes per streaming request.
+            NetworkTimeout = TimeSpan.FromMinutes(10),
+        };
         var credential = new ApiKeyCredential(ModelOptions.ApiKey);
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
