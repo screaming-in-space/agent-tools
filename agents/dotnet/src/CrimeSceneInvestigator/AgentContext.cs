@@ -1,5 +1,6 @@
 using System.ClientModel;
 using Agent.SDK.Configuration;
+using Agent.SDK.Console;
 using Agent.SDK.Logging;
 using CrimeSceneInvestigator.Telemetry;
 using Microsoft.Extensions.AI;
@@ -28,6 +29,7 @@ public sealed record AgentContext(
         using var loggerFactory = AgentLogging.CreateLoggerFactory();
 
         IChatClient agent = new ChatClientBuilder(chatClient)
+            .UseStreamingInterceptor(AgentConsole.Output)
             .UseOpenTelemetry(loggerFactory, sourceName: CsiTrace.Instance.Source.Name)
             .UseFunctionInvocation(loggerFactory, c => c.MaximumIterationsPerRequest = 50)
             .Build();

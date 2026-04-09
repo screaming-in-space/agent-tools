@@ -71,7 +71,9 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                 new(ChatRole.User, $"Investigate the markdown files in: {context.TargetPath}"),
             };
 
-            // Stream the response to show LLM thinking in real-time
+            // Stream the response — the StreamingInterceptor in the pipeline
+            // feeds AppendThinking for every LLM call (including intermediate ones
+            // between tool invocations). We just need to consume the enumerable.
             string? responseText = null;
             await foreach (var update in agent.GetStreamingResponseAsync(
                 messages,
@@ -80,7 +82,6 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             {
                 if (update.Text is { Length: > 0 } text)
                 {
-                    output.AppendThinking(text);
                     responseText = (responseText ?? "") + text;
                 }
             }

@@ -49,7 +49,10 @@ public static class AgentConsole
 
     public static void Configure(bool headless = false)
     {
-        _output = headless ? new PlainAgentOutput() : new SpectreAgentOutput();
+        // Fall back to plain output if stdout is redirected (piped, CI, etc.)
+        _output = headless || System.Console.IsOutputRedirected
+            ? new PlainAgentOutput()
+            : new SpectreAgentOutput();
     }
 }
 
