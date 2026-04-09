@@ -97,6 +97,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                 FilesProcessed: filesProcessed,
                 Duration: stopwatch.Elapsed,
                 OutputPath: Path.GetRelativePath(context.TargetPath, context.OutputPath),
+                FullOutputPath: context.OutputPath,
                 Success: true), ct);
 
             output.WriteResponse(responseText ?? "");
@@ -112,6 +113,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                 FilesProcessed: output.ToolCallCount,
                 Duration: stopwatch.Elapsed,
                 OutputPath: Path.GetRelativePath(context.TargetPath, context.OutputPath),
+                FullOutputPath: context.OutputPath,
                 Success: false), ct);
 
             Logger.LogError(ex, "Agent run failed");
@@ -140,7 +142,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         var modelOptions = AgentModelOptions.Resolve(Configuration, configKey);
 
         var outputPath = parseResult.GetValue(AgentCommandSetup.OutputOption)
-            ?? Path.Combine(targetPath, "CONTEXT.md");
+            ?? Path.Combine(targetPath, "context", "MAP.md");
 
         var output = AgentConsole.Output;
         var modelDisplay = string.IsNullOrEmpty(modelOptions.Model) ? "(server default)" : modelOptions.Model;

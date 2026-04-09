@@ -13,6 +13,7 @@ public sealed record AgentRunSummary(
     int FilesProcessed,
     TimeSpan Duration,
     string OutputPath,
+    string FullOutputPath,
     bool Success);
 
 // ── Interface ──────────────────────────────────────────────────────────
@@ -104,18 +105,29 @@ public sealed class PlainAgentOutput : IAgentOutput
 // ── Interactive Implementation ─────────────────────────────────────────
 
 /// <summary>
-/// Spectre.Console interactive output using Live display with:
-/// - Layout: left panel (file tree + progress) / right panel (reasoning)
-/// - Tree widget for directory/file status with guide lines
-/// - Progress bar for overall tool completion
-/// - Summary embedded in the layout when done
+/// Spectre.Console interactive output. Single-column layout:
+/// - Header: logo + agent name + figlet + status
+/// - Reasoning tree: each file is a branch, LLM thinking nests under it
+/// - File tree: directory listing with status indicators
+/// - Progress bar + summary
 /// </summary>
 public sealed class SpectreAgentOutput : IAgentOutput
 {
     private readonly object _lock = new();
-    private readonly List<(string ToolName, string? Path, double Seconds)> _completedTools = [];
     private readonly HashSet<string> _processedFiles = new(StringComparer.OrdinalIgnoreCase);
-    private readonly StringBuilder _thinking = new();
+    private readonly HashSet<string> _seenFiles = new(StringComparer.OrdinalIgnoreCase);
+
+    // Per-file work unit: tool calls + thinking text
+    private readonly Dictionary<string, FileWork> _workByFile = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _fileOrder = []; // insertion order
+    private string? _activeFile; // current file receiving thinking tokens
+    private readonly StringBuilder _pendingThinking = new(); // tokens before any file starts
+
+    private sealed class FileWork
+    {
+        public List<(string Tool, double Seconds)> Tools { get; } = [];
+        public StringBuilder Thinking { get; } = new();
+    }
 
     private TaskCompletionSource? _stopSignal;
     private Task? _renderTask;
@@ -124,11 +136,9 @@ public sealed class SpectreAgentOutput : IAgentOutput
     private string _currentTool = "";
     private string _currentPath = "";
     private int _spinnerFrame;
-    private readonly HashSet<string> _seenFiles = new(StringComparer.OrdinalIgnoreCase);
     private AgentRunSummary? _summary;
 
     private static readonly string[] Spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-    private const int MaxThinkingLines = 20;
 
     public bool IsInteractive => true;
     public int ToolCallCount { get; private set; }
@@ -152,8 +162,6 @@ public sealed class SpectreAgentOutput : IAgentOutput
                         try { await Task.Delay(140, ct); }
                         catch (OperationCanceledException) { break; }
                     }
-
-                    // Final frame with summary embedded
                     ctx.UpdateTarget(BuildLayout());
                 });
         }, ct);
@@ -175,10 +183,23 @@ public sealed class SpectreAgentOutput : IAgentOutput
             _currentPath = detail ?? "";
             _status = $"{toolName}...";
 
-            // Track unique files encountered (for progress denominator)
             if (detail is not null && detail.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             {
                 _seenFiles.Add(detail);
+                _activeFile = detail;
+
+                if (!_workByFile.ContainsKey(detail))
+                {
+                    _workByFile[detail] = new FileWork();
+                    _fileOrder.Add(detail);
+                }
+
+                // Flush any pending thinking into this file
+                if (_pendingThinking.Length > 0)
+                {
+                    _workByFile[detail].Thinking.Append(_pendingThinking);
+                    _pendingThinking.Clear();
+                }
             }
         }
     }
@@ -187,13 +208,14 @@ public sealed class SpectreAgentOutput : IAgentOutput
     {
         lock (_lock)
         {
-            var path = _currentPath;
-            _completedTools.Add((toolName, path.Length > 0 ? path : null, elapsed.TotalSeconds));
-
-            // Track unique files processed
-            if (path.Length > 0 && path.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            if (_currentPath.Length > 0 && _currentPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             {
-                _processedFiles.Add(path);
+                _processedFiles.Add(_currentPath);
+
+                if (_workByFile.TryGetValue(_currentPath, out var work))
+                {
+                    work.Tools.Add((toolName, elapsed.TotalSeconds));
+                }
             }
 
             _currentTool = "";
@@ -204,7 +226,17 @@ public sealed class SpectreAgentOutput : IAgentOutput
 
     public void AppendThinking(string token)
     {
-        lock (_lock) { _thinking.Append(token); }
+        lock (_lock)
+        {
+            if (_activeFile is not null && _workByFile.TryGetValue(_activeFile, out var work))
+            {
+                work.Thinking.Append(token);
+            }
+            else
+            {
+                _pendingThinking.Append(token);
+            }
+        }
     }
 
     public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
@@ -214,6 +246,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
             _summary = summary;
             _status = "Done";
             _currentTool = "";
+            _activeFile = null;
         }
 
         _stopSignal?.TrySetResult();
@@ -222,40 +255,102 @@ public sealed class SpectreAgentOutput : IAgentOutput
             await _renderTask;
         }
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[{AgentTheme.DimHex}]Press Enter to exit...[/]");
-        System.Console.ReadLine();
+        // Write reasoning to markdown file next to the output
+        WriteReasoningFile(summary);
+    }
+
+    /// <summary>
+    /// Writes the full reasoning trace as a markdown file next to the agent output.
+    /// e.g. CONTEXT.md → CONTEXT.reasoning.md
+    /// </summary>
+    private void WriteReasoningFile(AgentRunSummary summary)
+    {
+        try
+        {
+            var outputDir = Path.GetDirectoryName(summary.FullOutputPath);
+            var reasoningPath = Path.Combine(outputDir ?? ".", "REASONING.md");
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"# Reasoning Trace");
+            sb.AppendLine();
+            sb.AppendLine($"> Agent: {_agentName}");
+            sb.AppendLine($"> Duration: {summary.Duration.TotalSeconds:F1}s");
+            sb.AppendLine($"> Tools: {summary.ToolCallCount} calls");
+            sb.AppendLine($"> Status: {(summary.Success ? "Success" : "Failed")}");
+            sb.AppendLine();
+
+            foreach (var file in _fileOrder)
+            {
+                if (!_workByFile.TryGetValue(file, out var work))
+                {
+                    continue;
+                }
+
+                sb.AppendLine($"## {file}");
+                sb.AppendLine();
+
+                if (work.Tools.Count > 0)
+                {
+                    foreach (var (tool, secs) in work.Tools)
+                    {
+                        sb.AppendLine($"- **{tool}** ({secs:F1}s)");
+                    }
+                    sb.AppendLine();
+                }
+
+                var thinking = work.Thinking.ToString().Trim();
+                if (thinking.Length > 0)
+                {
+                    sb.AppendLine("### Thinking");
+                    sb.AppendLine();
+                    sb.AppendLine(thinking);
+                    sb.AppendLine();
+                }
+            }
+
+            // Pending thinking that wasn't associated with a file
+            var pending = _pendingThinking.ToString().Trim();
+            if (pending.Length > 0)
+            {
+                sb.AppendLine("## General");
+                sb.AppendLine();
+                sb.AppendLine(pending);
+                sb.AppendLine();
+            }
+
+            File.WriteAllText(reasoningPath, sb.ToString());
+        }
+        catch
+        {
+            // Best effort — don't fail the agent if reasoning write fails
+        }
     }
 
     public void WriteResponse(string text) { }
-
     public void Dispose() { _stopSignal?.TrySetResult(); }
 
-    // ── Layout Builder ─────────────────────────────────────────────────
+    // ── Layout ─────────────────────────────────────────────────────────
 
     private IRenderable BuildLayout()
     {
         lock (_lock)
         {
-            var layout = new Layout("root")
-                .SplitRows(
-                    new Layout("header").Size(10),
-                    new Layout("body"));
+            var sections = new List<IRenderable>();
 
-            layout["body"].SplitColumns(
-                new Layout("left").Ratio(1),
-                new Layout("right").Ratio(2));
+            // Header
+            sections.Add(BuildHeader());
 
-            // Header: logo + agent name + status
-            layout["header"].Update(BuildHeader());
+            // Reasoning tree (files + thinking)
+            var reasoningTree = BuildReasoningTree();
+            if (reasoningTree is not null)
+            {
+                sections.Add(reasoningTree);
+            }
 
-            // Left: tree + progress + summary
-            layout["left"].Update(BuildLeftPanel());
+            // File tree + progress + summary
+            sections.Add(BuildStatusPanel());
 
-            // Right: reasoning stream
-            layout["right"].Update(BuildRightPanel());
-
-            return layout;
+            return new Rows(sections);
         }
     }
 
@@ -283,17 +378,84 @@ public sealed class SpectreAgentOutput : IAgentOutput
             new Markup($"[{spinColor}]{spin}[/] [{AgentTheme.DimLightHex}]{Markup.Escape(_status)}[/]"));
 
         table.AddRow(AgentTheme.Logo(), info);
-
         return table;
     }
 
-    private IRenderable BuildLeftPanel()
+    /// <summary>Builds a tree where each file is a branch with tool calls + reasoning nested under it.</summary>
+    private IRenderable? BuildReasoningTree()
+    {
+        if (_fileOrder.Count == 0 && _pendingThinking.Length == 0)
+        {
+            return null;
+        }
+
+        var tree = new Tree($"[{AgentTheme.CyanHex} bold]Reasoning[/]")
+            .Guide(TreeGuide.BoldLine)
+            .Style(new Style(AgentTheme.Dim));
+
+        // Show pending thinking (before any file-specific work starts)
+        if (_pendingThinking.Length > 0 && _fileOrder.Count == 0)
+        {
+            var pendingNode = tree.AddNode($"[{AgentTheme.OrangeHex}]{Spinner[_spinnerFrame]} Analyzing...[/]");
+            foreach (var line in _pendingThinking.ToString().Trim().Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.Length > 0)
+                {
+                    pendingNode.AddNode($"[{AgentTheme.DimHex}]{Markup.Escape(trimmed)}[/]");
+                }
+            }
+        }
+
+        foreach (var file in _fileOrder)
+        {
+            if (!_workByFile.TryGetValue(file, out var work))
+            {
+                continue;
+            }
+
+            var isActive = _activeFile?.Equals(file, StringComparison.OrdinalIgnoreCase) == true
+                           && _summary is null;
+            var icon = isActive
+                ? $"[{AgentTheme.OrangeHex}]{Spinner[_spinnerFrame]}[/]"
+                : $"[{AgentTheme.GreenHex}]✓[/]";
+            var nameColor = isActive ? AgentTheme.CyanHex : AgentTheme.DimLightHex;
+
+            var fileNode = tree.AddNode($"{icon} [{nameColor}]{Markup.Escape(file)}[/]");
+
+            // Tool calls performed on this file
+            foreach (var (tool, secs) in work.Tools)
+            {
+                fileNode.AddNode($"[{AgentTheme.DimHex}]{Markup.Escape(tool)} [{AgentTheme.DimLightHex}]{secs:F1}s[/][/]");
+            }
+
+            // Any LLM thinking text about this file
+            var text = work.Thinking.ToString().Trim();
+            if (text.Length > 0)
+            {
+                foreach (var line in text.Split('\n'))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.Length > 0)
+                    {
+                        fileNode.AddNode($"[{AgentTheme.OrangeHex}]{Markup.Escape(trimmed)}[/]");
+                    }
+                }
+            }
+        }
+
+        return new Panel(tree)
+            .Border(BoxBorder.Rounded)
+            .BorderStyle(new Style(AgentTheme.Dim));
+    }
+
+    /// <summary>File tree + progress + summary in a compact panel.</summary>
+    private IRenderable BuildStatusPanel()
     {
         var rows = new List<IRenderable>();
 
         // File tree
         rows.Add(BuildFileTree());
-        rows.Add(new Text(""));
 
         // Progress bar
         var processed = _processedFiles.Count;
@@ -301,7 +463,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
         if (total > 0)
         {
             var pct = (int)(processed * 100.0 / total);
-            var filled = pct / 5; // 20 chars wide
+            var filled = pct / 5;
             var bar = new string('█', filled) + new string('░', 20 - filled);
             rows.Add(new Markup($" [{AgentTheme.CyanHex}]{bar}[/] [{AgentTheme.DimLightHex}]{processed}/{total} files[/]"));
         }
@@ -310,11 +472,10 @@ public sealed class SpectreAgentOutput : IAgentOutput
             rows.Add(new Markup($" [{AgentTheme.DimHex}]Discovering files...[/]"));
         }
 
-        rows.Add(new Text(""));
-
-        // Summary (embedded when done)
+        // Summary (when done)
         if (_summary is not null)
         {
+            rows.Add(new Text(""));
             rows.Add(AgentTheme.Divider("Summary"));
             var s = _summary;
             var statusText = s.Success ? $"[{AgentTheme.GreenHex}]Success[/]" : $"[{AgentTheme.RedHex}]Failed[/]";
@@ -329,10 +490,9 @@ public sealed class SpectreAgentOutput : IAgentOutput
         }
 
         return new Panel(new Rows(rows))
-            .Header($"[{AgentTheme.CyanHex} bold]{Markup.Escape(_agentName)}[/]")
+            .Header($"[{AgentTheme.CyanHex} bold]Files[/]")
             .Border(BoxBorder.Rounded)
-            .BorderStyle(new Style(AgentTheme.Dim))
-            .Expand();
+            .BorderStyle(new Style(AgentTheme.Dim));
     }
 
     private Tree BuildFileTree()
@@ -341,28 +501,23 @@ public sealed class SpectreAgentOutput : IAgentOutput
             .Guide(TreeGuide.BoldLine)
             .Style(new Style(AgentTheme.Dim));
 
-        // Group processed files by directory
         var dirs = new Dictionary<string, List<(string File, bool Done, bool Active)>>(
             StringComparer.OrdinalIgnoreCase);
 
-        // Add completed files
         foreach (var path in _processedFiles)
         {
             var dir = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? ".";
             if (dir.Length == 0) { dir = "."; }
             var file = Path.GetFileName(path);
-
             if (!dirs.ContainsKey(dir)) { dirs[dir] = []; }
             dirs[dir].Add((file, Done: true, Active: false));
         }
 
-        // Add currently active file
         if (_currentPath.Length > 0 && _currentPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
         {
             var dir = Path.GetDirectoryName(_currentPath)?.Replace('\\', '/') ?? ".";
             if (dir.Length == 0) { dir = "."; }
             var file = Path.GetFileName(_currentPath);
-
             if (!dirs.ContainsKey(dir)) { dirs[dir] = []; }
             if (!dirs[dir].Any(f => f.File.Equals(file, StringComparison.OrdinalIgnoreCase)))
             {
@@ -370,10 +525,8 @@ public sealed class SpectreAgentOutput : IAgentOutput
             }
         }
 
-        // Render tree
         foreach (var (dir, files) in dirs.OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase))
         {
-            // Root-level files go directly on tree, subdirs get a folder node
             TreeNode? dirNode = dir == "."
                 ? null
                 : tree.AddNode($"[{AgentTheme.SkyHex}]📁 {Markup.Escape(dir)}[/]");
@@ -401,32 +554,5 @@ public sealed class SpectreAgentOutput : IAgentOutput
         }
 
         return tree;
-    }
-
-    private IRenderable BuildRightPanel()
-    {
-        var thinkText = TruncateThinking();
-
-        // Use Spectre's natural word wrapping — just pass the full text as Markup
-        IRenderable content = thinkText.Length > 0
-            ? new Markup($"[{AgentTheme.DimLightHex}]{Markup.Escape(thinkText)}[/]")
-            : new Markup($"[{AgentTheme.DimHex}]Waiting for model...[/]");
-
-        return new Panel(content)
-            .Header($"[{AgentTheme.CyanHex} bold]Reasoning[/]")
-            .Border(BoxBorder.Rounded)
-            .BorderStyle(new Style(AgentTheme.Dim))
-            .Expand();
-    }
-
-    private string TruncateThinking()
-    {
-        var text = _thinking.ToString().TrimEnd();
-        if (text.Length == 0) { return ""; }
-
-        var lines = text.Split('\n');
-        return lines.Length <= MaxThinkingLines
-            ? text
-            : string.Join('\n', lines[^MaxThinkingLines..]);
     }
 }
