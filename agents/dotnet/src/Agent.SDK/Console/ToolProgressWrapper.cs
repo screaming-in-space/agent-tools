@@ -80,10 +80,30 @@ public sealed class ToolProgressWrapper : AIFunction
 
     private static string FriendlyName(string functionName) => functionName switch
     {
+        // FileTools
         "ListMarkdownFiles" => "Listing files",
         "ReadFileContent" => "Reading file",
         "ExtractStructure" => "Extracting structure",
         "WriteOutput" => "Writing output",
+        // CodeCommentTools
+        "ListSourceFiles" => "Listing source files",
+        "ExtractComments" => "Extracting comments",
+        "ExtractCodePatterns" => "Scanning patterns",
+        // StructureTools
+        "ListProjects" => "Listing projects",
+        "ReadProjectFile" => "Reading project",
+        "MapDependencyGraph" => "Mapping dependencies",
+        "DetectArchitecturePattern" => "Classifying architecture",
+        // QualityTools
+        "AnalyzeCSharpFile" => "Analyzing C# file",
+        "AnalyzeCSharpProject" => "Analyzing project quality",
+        "AnalyzeSourceFile" => "Analyzing source file",
+        "CheckEditorConfig" => "Checking editorconfig",
+        // GitTools
+        "GetGitLog" => "Reading git log",
+        "GetGitDiff" => "Reading git diff",
+        "GetGitStats" => "Computing git stats",
+        "CheckJournalExists" => "Checking journal",
         _ => functionName
     };
 }
@@ -97,13 +117,13 @@ public static class ToolProgressExtensions
     /// Wraps each <see cref="AIFunction"/> in the list with progress reporting.
     /// In headless mode, returns the original list unchanged.
     /// </summary>
+    /// <summary>
+    /// Wraps each <see cref="AIFunction"/> in the list with progress reporting.
+    /// Always wraps regardless of interactive/headless mode so that tool call
+    /// counting works in both modes.
+    /// </summary>
     public static IList<AITool> WithProgress(this IList<AITool> tools, IAgentOutput output)
     {
-        if (!output.IsInteractive)
-        {
-            return tools;
-        }
-
         return tools.Select(tool => tool is AIFunction func
             ? new ToolProgressWrapper(func, output)
             : tool).ToList<AITool>();

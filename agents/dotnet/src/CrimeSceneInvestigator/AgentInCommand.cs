@@ -214,9 +214,10 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         if (scanOptions.ScanGitHistory) enabledScanners.Add("journal");
         enabledScanners.Add("done"); // always runs
 
-        output.UpdateStatus($"Planning model assignments ({availableConfigs.Count} models, {enabledScanners.Count} scanners)");
+        output.ScannerStarted("Planner", context.ModelOptions.Model);
         Logger.LogInformation("Running planner with {ModelCount} available models: {Models}",
             availableConfigs.Count, string.Join(", ", availableConfigs.Keys));
+        var plannerSw = Stopwatch.StartNew();
 
         try
         {
@@ -253,16 +254,20 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             // Parse the JSON from the response (may be wrapped in ```json ... ```)
             var plan = ParsePlannerResponse(responseText, allConfigs);
 
+            plannerSw.Stop();
+            output.ScannerCompleted("Planner", plannerSw.Elapsed, success: true);
+
             foreach (var (scanner, options) in plan)
             {
                 Logger.LogInformation("Planner assigned {Scanner} → {Model}", scanner, options.Model);
-                output.UpdateStatus($"Plan: {scanner} → {options.Model}");
             }
 
             return plan;
         }
         catch (Exception ex)
         {
+            plannerSw.Stop();
+            output.ScannerCompleted("Planner", plannerSw.Elapsed, success: false);
             Logger.LogError(ex, "Planner failed, using default model for all scanners");
             return [];
         }
@@ -320,7 +325,9 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
     {
         var output = AgentConsole.Output;
         var activeModel = modelOverride ?? context.ModelOptions;
-        output.UpdateStatus($"Running: {scannerName} [{activeModel.Model}]");
+        var sw = Stopwatch.StartNew();
+
+        output.ScannerStarted(scannerName, activeModel.Model);
         Logger.LogInformation("Starting scanner: {ScannerName} with model {Model}", scannerName, activeModel.Model);
 
         IChatClient agent = await context.GetAgentClientAsync(modelOverride);
@@ -394,12 +401,16 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         }
         catch (Exception ex)
         {
+            sw.Stop();
+            output.ScannerCompleted(scannerName, sw.Elapsed, success: false);
             Logger.LogError(ex, "Scanner {ScannerName} failed: {Message}", scannerName, ex.Message);
-            output.UpdateStatus($"Scanner {scannerName} failed: {ex.Message}");
             // Continue to next scanner — don't abort the whole run
+            return;
         }
 
-        Logger.LogInformation("Completed scanner: {ScannerName}", scannerName);
+        sw.Stop();
+        output.ScannerCompleted(scannerName, sw.Elapsed, success: true);
+        Logger.LogInformation("Completed scanner: {ScannerName} in {Elapsed:F1}s", scannerName, sw.Elapsed.TotalSeconds);
     }
 
     // ── Setup ───────────────────────────────────────────────────────────
