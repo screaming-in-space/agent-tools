@@ -1,3 +1,4 @@
+using System.Reflection;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -61,8 +62,7 @@ public static class AgentTheme
         var panel = new Panel(content)
             .Header($"[{CyanHex} bold]{Markup.Escape(header)}[/]")
             .Border(BoxBorder.Double)
-            .BorderStyle(new Style(Cyan))
-            .Expand();
+            .BorderStyle(new Style(Cyan));
         return panel;
     }
 
@@ -101,6 +101,71 @@ public static class AgentTheme
 
     /// <summary>Styled cross for failed items.</summary>
     public static string Cross => $"[{RedHex}]✗[/]";
+
+    /// <summary>
+    /// Renders the screaming-in-space agent logo as a Spectre Canvas.
+    /// Two 3:4:5 right triangles, each missing the medium-length horizontal leg.
+    /// Top: hypotenuse ╲ (top-right to center-left) + short vertical leg (going down from top-right).
+    /// Bottom: mirror — short vertical leg (going up from bottom-left) + hypotenuse ╱ (to center-right).
+    /// Ringed planet centered between the two triangle points.
+    /// Compact 8x14 for header display.
+    /// </summary>
+    public static Canvas Logo()
+    {
+        var c = new Canvas(8, 14);
+
+        // ── Top triangle ──────────────────────────────
+        // Hypotenuse ╲: from (7,0) down-left to (2,5)
+        c.SetPixel(7, 0, Cyan);  c.SetPixel(6, 1, Cyan);
+        c.SetPixel(5, 2, Cyan);  c.SetPixel(4, 3, Cyan);
+        c.SetPixel(3, 4, Cyan);  c.SetPixel(2, 5, Cyan);
+
+        // Short vertical leg: down from (7,0) to (7,2)
+        c.SetPixel(7, 1, Cyan);  c.SetPixel(7, 2, Cyan);
+
+        // ── Planet + accretion ring ───────────────────
+        c.SetPixel(3, 6, Orange);  c.SetPixel(4, 6, Orange);
+        c.SetPixel(3, 7, Orange);  c.SetPixel(4, 7, Orange);
+        // Ring extends wider
+        c.SetPixel(1, 6, Orange);  c.SetPixel(2, 6, Orange);
+        c.SetPixel(5, 6, Orange);  c.SetPixel(6, 6, Orange);
+        c.SetPixel(1, 7, Orange);  c.SetPixel(2, 7, Orange);
+        c.SetPixel(5, 7, Orange);  c.SetPixel(6, 7, Orange);
+
+        // ── Bottom triangle (mirrored) ────────────────
+        // Short vertical leg: up from (0,13) to (0,11)
+        c.SetPixel(0, 11, Cyan);  c.SetPixel(0, 12, Cyan);
+
+        // Hypotenuse ╱: from (0,13) up-right to (5,8)
+        c.SetPixel(0, 13, Cyan);  c.SetPixel(1, 12, Cyan);
+        c.SetPixel(2, 11, Cyan);  c.SetPixel(3, 10, Cyan);
+        c.SetPixel(4, 9, Cyan);   c.SetPixel(5, 8, Cyan);
+
+        return c;
+    }
+
+    /// <summary>
+    /// Reads version and commit SHA from the entry assembly's InformationalVersion.
+    /// Format: "0.1.0+abcdef1234" → version "0.1.0", commit "abcdef1".
+    /// Falls back to AssemblyVersion if InformationalVersion is unavailable.
+    /// </summary>
+    public static (string Version, string? Commit) GetVersionInfo()
+    {
+        var asm = System.Reflection.Assembly.GetEntryAssembly();
+        var infoVersion = asm?
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+
+        if (infoVersion is not null && infoVersion.Contains('+'))
+        {
+            var parts = infoVersion.Split('+', 2);
+            var commit = parts[1].Length > 7 ? parts[1][..7] : parts[1];
+            return (parts[0], commit);
+        }
+
+        var version = asm?.GetName().Version?.ToString(3) ?? "0.0.0";
+        return (version, null);
+    }
 
     // ── Markup color shorthand (hex strings for inline Spectre markup) ──
 

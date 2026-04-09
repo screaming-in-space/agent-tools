@@ -65,25 +65,40 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                 chatOptions.MaxOutputTokens = context.ModelOptions.MaxOutputTokens;
             }
 
-            var response = await agent.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, systemPrompt),
-                    new ChatMessage(ChatRole.User, $"Investigate the markdown files in: {context.TargetPath}"),
-                ],
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, $"Investigate the markdown files in: {context.TargetPath}"),
+            };
+
+            // Stream the response to show LLM thinking in real-time
+            string? responseText = null;
+            await foreach (var update in agent.GetStreamingResponseAsync(
+                messages,
                 chatOptions,
-                ct);
+                ct))
+            {
+                if (update.Text is { Length: > 0 } text)
+                {
+                    output.AppendThinking(text);
+                    responseText = (responseText ?? "") + text;
+                }
+            }
 
             stopwatch.Stop();
             CsiMetrics.RunDuration.Record(stopwatch.Elapsed.TotalSeconds);
             span?.SetSuccess();
 
+            var filesProcessed = output.ToolCallCount;
+
             await output.StopAsync(new AgentRunSummary(
-                FilesProcessed: output.ToolCallCount,
+                ToolCallCount: output.ToolCallCount,
+                FilesProcessed: filesProcessed,
                 Duration: stopwatch.Elapsed,
                 OutputPath: Path.GetRelativePath(context.TargetPath, context.OutputPath),
                 Success: true), ct);
 
-            output.WriteResponse(response.Text);
+            output.WriteResponse(responseText ?? "");
             return 0;
         }
         catch (Exception ex)
@@ -92,6 +107,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             span?.RecordError(ex);
 
             await output.StopAsync(new AgentRunSummary(
+                ToolCallCount: output.ToolCallCount,
                 FilesProcessed: output.ToolCallCount,
                 Duration: stopwatch.Elapsed,
                 OutputPath: Path.GetRelativePath(context.TargetPath, context.OutputPath),

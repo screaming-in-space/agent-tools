@@ -49,14 +49,34 @@ public sealed class ToolProgressWrapper : AIFunction
     {
         foreach (var key in (ReadOnlySpan<string>)["filePath", "directoryPath", "path"])
         {
-            if (arguments.TryGetValue(key, out var value) && value is string s && s.Length > 0)
+            if (arguments.TryGetValue(key, out var value) && ExtractString(value) is { Length: > 0 } s)
             {
-                return Path.GetFileName(s);
+                // Make path relative to RootDirectory for tree display
+                var root = Agent.SDK.Tools.FileTools.RootDirectory;
+                if (root.Length > 0)
+                {
+                    var resolved = Agent.SDK.Tools.FileTools.ResolveSafePath(s);
+                    if (resolved is not null)
+                    {
+                        var relative = Path.GetRelativePath(root, resolved).Replace('\\', '/');
+                        // Don't return "." for directory-level tools
+                        return relative == "." ? null : relative;
+                    }
+                }
+
+                return s.Replace('\\', '/');
             }
         }
 
         return null;
     }
+
+    private static string? ExtractString(object? value) => value switch
+    {
+        string s => s,
+        JsonElement { ValueKind: JsonValueKind.String } je => je.GetString(),
+        _ => value?.ToString()
+    };
 
     private static string FriendlyName(string functionName) => functionName switch
     {
