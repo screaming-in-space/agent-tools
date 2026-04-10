@@ -24,6 +24,5 @@
 ## Build & test
 
 ```bash
-cd agents/dotnet
 dotnet build
 dotnet test
