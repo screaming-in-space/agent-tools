@@ -15,7 +15,7 @@ agent-tools/
 ├── skills/                        Shared Claude Code skills
 │   ├── agentify/                  Bootstrap repos with ML context files
 │   ├── claude-api-qa-creator/     Generate QA helpers from repo analysis
-│   └── install.sh                 Skill installer (local or global)
+│   └── install-skills.sh                 Skill installer (local or global)
 └── README.md                      This file
 ```
 
