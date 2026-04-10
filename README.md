@@ -8,14 +8,16 @@ Shared [Claude Code](https://claude.ai/claude-code) skills and standalone .NET 1
 agent-tools/
 ├── .claude/CLAUDE.md              Thin shim → context/RULES.md, context/STRUCTURE.md
 ├── agents/dotnet/                 .NET agent workspace (solution, projects, tests)
+├── benchmarks/                    ModelBoss output (BENCHMARK.md)
 ├── context/
 │   ├── RULES.md                   Technical constraints, coding patterns, rejected patterns
 │   ├── STRUCTURE.md               Project architecture, directory tree, file map
-│   └── models/                    Model capability profiles for planner evaluation
+│   ├── models/                    Model capability profiles for planner evaluation
+│   └── gpu/                       GPU capability profiles for model-fit analysis
 ├── skills/                        Shared Claude Code skills
 │   ├── agentify/                  Bootstrap repos with ML context files
 │   ├── claude-api-qa-creator/     Generate QA helpers from repo analysis
-│   └── install-skills.sh                 Skill installer (local or global)
+│   └── install-skills.sh          Skill installer (local or global)
 └── README.md                      This file
 ```
 
@@ -24,8 +26,11 @@ agent-tools/
 | Agent | Description |
 |-------|-------------|
 | [`CrimeSceneInvestigator`](agents/dotnet/src/CrimeSceneInvestigator/) | Multi-scanner codebase intelligence agent. Scans a git repo and produces structured context files for LLM consumption. |
+| [`ModelBoss`](agents/dotnet/src/ModelBoss/) | Benchmark local LLM models with deterministic speed, accuracy, and quality scoring. Produces ranked scorecards. |
 
 ### Running an agent
+
+#### CrimeSceneInvestigator
 
 ```bash
 cd agents/dotnet
@@ -40,7 +45,34 @@ dotnet run --project src/CrimeSceneInvestigator -- <directory> [--config-key <ke
 | `--scan` | Comma-separated scanners: `markdown,rules,structure,quality,journal` |
 | `--headless` | Disable rich terminal UI, use plain log output |
 
+#### ModelBoss
+
+```bash
+cd agents/dotnet
+dotnet run --project src/ModelBoss -- [--models <keys>] [--iterations <n>] [--category <cat>] [--output <dir>] [--headless]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--models` | Comma-separated config keys to benchmark (default: all configured models) |
+| `--iterations` | Number of measured iterations per prompt (default: `3`) |
+| `--category` | Benchmark category: `instruction_following`, `extraction`, `markdown_generation`, `reasoning`, `all` (default: `all`) |
+| `--output` | Output directory for benchmark reports (default: `<repo-root>/benchmarks/`) |
+| `--repo-root` | Repository root for loading model/GPU registries (default: auto-detect) |
+| `--headless` | Disable rich terminal UI, use plain log output |
+
 Requires .NET 10 SDK and an OpenAI-compatible endpoint (e.g., [LM Studio](https://lmstudio.ai), [Ollama](https://ollama.com)).
+
+### Output storage
+
+Each agent writes to a default output directory relative to the repo root. Override with `--output`.
+
+| Agent | Default output | Files produced |
+|-------|----------------|----------------|
+| CrimeSceneInvestigator | `<target>/context/` | `MAP.md`, `RULES.md`, `STRUCTURE.md`, `QUALITY.md`, `JOURNAL.md`, `DONE.md` |
+| ModelBoss | `<repo-root>/benchmarks/` | `BENCHMARK.md` — ranked scorecards with speed, accuracy, and composite scores |
+
+Output directories are created automatically if they don't exist. Benchmark results are overwritten on each run — commit or rename previous reports to preserve history.
 
 ## Skills
 

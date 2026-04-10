@@ -29,7 +29,6 @@ These apply everywhere. No exceptions.
 - Microsoft.Extensions.Configuration.Json 10.0.5 for `appsettings.json` loading
 - `System.Diagnostics.ActivitySource` / `System.Diagnostics.Metrics.Meter` for telemetry (BCL, no OTel SDK export for CLI)
 - xUnit 2.9.3 + NSubstitute 5.3.0 for testing
-- No DI container - agents are console apps with manual wiring
 - No Aspire - agents run standalone against any OpenAI-compatible endpoint
 
 ---
@@ -87,7 +86,6 @@ Each agent follows the same structure:
       builds system prompt, calls GetResponseAsync, returns exit code
 ```
 
-- No `IHost`, no `IServiceProvider`, no `Program.CreateBuilder()`. Top-level statements with manual wiring.
 - `AgentInCommand` is a `record` with `ILogger<T>` + `IConfiguration` via primary constructor.
 - `SetupAsync` handles CLI resolution, config binding, health check, and tool registration. Returns an `AgentContext` record or early-exit code.
 - `RunAsync` consumes the context: builds pipeline, runs agent, returns exit code.

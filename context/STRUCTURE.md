@@ -104,6 +104,33 @@ agents/dotnet/
 │       ├── FallbackValidatorTests.cs    # IsSubstantiveMarkdown chatbot preamble detection
 │       ├── PlannerPromptTests.cs        # Scanner manifests, complexity ratings, model configs
 │       └── SystemPromptTests.cs         # Prompt content: tool names, output format, paths
+│   ├── ModelBoss/                       # Agent: benchmarks local LLMs and produces ranked scorecards
+│   │   ├── Benchmarks/
+│   │   │   ├── AccuracyResult.cs        # Accuracy assessment record with individual check breakdowns
+│   │   │   ├── AccuracyScorer.cs        # Deterministic output scoring (substrings, structure, bigram similarity)
+│   │   │   ├── BenchmarkPrompt.cs       # Prompt definition with expected output criteria
+│   │   │   ├── BenchmarkResult.cs       # Raw timing result per inference request
+│   │   │   ├── BenchmarkRunner.cs       # Warmup + measured iterations with streaming token counting
+│   │   │   ├── BenchmarkSuites.cs       # Built-in prompt suites (instruction, extraction, markdown, reasoning)
+│   │   │   ├── ModelScorecard.cs        # Aggregated scorecard with composite, speed, accuracy metrics
+│   │   │   └── ScorecardBuilder.cs      # Pure computation: raw results → scorecard with percentiles
+│   │   ├── Tools/
+│   │   │   ├── BenchmarkTools.cs        # Agent-callable tools wrapping BenchmarkRunner + AccuracyScorer
+│   │   │   ├── GpuTools.cs              # GPU discovery and model-fit compatibility matrix
+│   │   │   ├── ModelTools.cs            # Model registry, config resolution, endpoint queries
+│   │   │   └── ReportTools.cs           # File output tool for writing benchmark reports
+│   │   ├── BossAgent.cs                 # Orchestrator: resolve → validate → benchmark → score → report
+│   │   ├── BossCommandSetup.cs          # System.CommandLine definitions (--models, --iterations, --category)
+│   │   ├── BossPrompt.cs               # System prompt for LLM-driven benchmark workflow
+│   │   ├── ReportFormatter.cs           # Markdown report builder from ranked scorecards
+│   │   ├── appsettings.json             # Serilog overrides, Models:{key} config sections
+│   │   ├── ModelBoss.csproj
+│   │   └── Program.cs                   # Thin bootstrap: config, logging, CLI invoke, flush
+│   └── ModelBoss.Tests/                 # Unit tests for ModelBoss
+│       ├── ModelBoss.Tests.csproj
+│       ├── AccuracyScorerTests.cs       # Accuracy scoring: substrings, structure, length, similarity, pass/fail
+│       ├── BenchmarkSuitesTests.cs      # Suite categories, unique names, prompt validation
+│       └── ScorecardBuilderTests.cs     # Aggregation, composite formula, percentiles, pass rate
 ├── .github/
 │   └── copilot-instructions.md         # Thin shim (workspace-scoped)
 ├── .editorconfig                       # Code style + analyzer severity overrides
@@ -202,6 +229,45 @@ Agent-specific tests for prompts, health check, and fallback validation.
 | `SystemPromptTests.cs` | Verifies built prompt contains tool names, output format, and runtime paths. |
 
 **Depends on:** CrimeSceneInvestigator (project ref), xUnit, NSubstitute (auto-imported via `Test.Build.props`)
+
+### ModelBoss
+
+Console agent. Benchmarks local LLM models against built-in prompt suites and produces ranked scorecards with composite scores combining speed, accuracy, and pass rate. No LLM-as-judge — all scoring is deterministic (substring matching, structure validation, bigram similarity).
+
+| File | Purpose |
+|------|---------|
+| `Program.cs` | Thin bootstrap: builds `IConfiguration` from `appsettings.json`, configures logging + console, creates `BossAgent`, invokes CLI. Manual wiring, no DI container. |
+| `BossCommandSetup.cs` | System.CommandLine `RootCommand` factory — `--models`, `--iterations`, `--category`, `--output`, `--repo-root`, `--headless` options. |
+| `BossAgent.cs` | Record with `ILoggerFactory` + `IConfiguration`. Orchestrates: resolve CLI → load registries → validate endpoint → run benchmarks per model → score accuracy → build scorecards → write report. |
+| `BossPrompt.cs` | System prompt for LLM-driven workflow: discover hardware, check loaded models, run benchmarks, compose and save report. |
+| `ReportFormatter.cs` | Internal. Formats ranked markdown report with rankings table, hardware summary, per-model scorecards, recommendations, and methodology. |
+| `Benchmarks/BenchmarkRunner.cs` | Executes prompts against a model endpoint with warmup + measured iterations. Streaming token counting with `Stopwatch`-based timing. |
+| `Benchmarks/BenchmarkSuites.cs` | Built-in prompt suites: `InstructionFollowing` (format compliance), `Extraction` (structured data), `MarkdownGeneration` (clean markdown), `Reasoning` (multi-step analysis). |
+| `Benchmarks/BenchmarkPrompt.cs` | Sealed record defining a benchmark prompt with `ExpectedOutput` criteria (required/forbidden substrings, structure, reference, length bounds, pass threshold). |
+| `Benchmarks/BenchmarkResult.cs` | Raw timing result per inference request: duration, TTFT, token counts, raw output, success flag. |
+| `Benchmarks/AccuracyScorer.cs` | Deterministic scoring: length, required substrings, forbidden substrings, structural elements, bigram similarity to reference. Weighted composite per check. |
+| `Benchmarks/AccuracyResult.cs` | Accuracy assessment record with individual `AccuracyCheck` breakdowns. |
+| `Benchmarks/ModelScorecard.cs` | Aggregated scorecard: median tok/s, P5 tok/s, TTFT, accuracy mean, pass rate, composite. `ModelSummary` for registry metadata. |
+| `Benchmarks/ScorecardBuilder.cs` | Pure computation: raw results → percentile-based speed metrics → composite score `(accuracy × 0.6) + (normalized_speed × 0.3) + (pass_rate × 0.1)`. |
+| `Tools/BenchmarkTools.cs` | Agent-callable tools wrapping `BenchmarkRunner` + `AccuracyScorer`. `RunSpeedBenchmarkAsync`, `RunAccuracyBenchmarkAsync`, `RunFullSuiteAsync`. |
+| `Tools/ModelTools.cs` | Registry data, endpoint queries, config resolution. `ListRegisteredModels`, `ListConfiguredModels`, `GetLoadedModelsAsync`, `GetModelProfile`. |
+| `Tools/GpuTools.cs` | GPU discovery. `ListGpus`, `CheckModelFit` (compatibility matrix at Q4/Q8 quantization). |
+| `Tools/ReportTools.cs` | File output. `WriteReportAsync` with filename sanitization. |
+| `appsettings.json` | Serilog overrides + `Models:{key}` sections (default, qwen, gemma, gemma-e4b, gemma-26b, glm, embedding). |
+
+**Depends on:** Agent.SDK (project ref), Microsoft.Extensions.AI, Microsoft.Extensions.AI.OpenAI, Microsoft.Extensions.Configuration.Json, OpenAI, System.CommandLine
+
+### ModelBoss.Tests
+
+Unit tests for ModelBoss benchmark engine and scoring.
+
+| File | Purpose |
+|------|---------|
+| `AccuracyScorerTests.cs` | Tests `Score` through public API: required/forbidden substrings, length validation, structural elements, reference similarity, composite pass/fail, null/empty edge cases. |
+| `ScorecardBuilderTests.cs` | Aggregation: empty results, multi-prompt, failed benchmark exclusion, composite formula weights, speed normalization cap, pass rate, registry metadata preservation. |
+| `BenchmarkSuitesTests.cs` | Suite integrity: all categories present, count matches sum-of-parts, unique names, non-empty messages, expected output, reasonable timeouts, minimum prompt counts. |
+
+**Depends on:** ModelBoss (project ref), xUnit, NSubstitute (auto-imported via `Test.Build.props`)
 
 ## Conventions
 
