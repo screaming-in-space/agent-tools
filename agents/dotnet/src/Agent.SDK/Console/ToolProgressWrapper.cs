@@ -13,11 +13,13 @@ public sealed class ToolProgressWrapper : AIFunction
 {
     private readonly AIFunction _inner;
     private readonly IAgentOutput _output;
+    private readonly Tools.FileTools? _fileTools;
 
-    public ToolProgressWrapper(AIFunction inner, IAgentOutput output)
+    public ToolProgressWrapper(AIFunction inner, IAgentOutput output, Tools.FileTools? fileTools = null)
     {
         _inner = inner;
         _output = output;
+        _fileTools = fileTools;
     }
 
     public override string Name => _inner.Name;
@@ -28,7 +30,7 @@ public sealed class ToolProgressWrapper : AIFunction
         AIFunctionArguments arguments,
         CancellationToken cancellationToken)
     {
-        var detail = ExtractDetail(arguments);
+        var detail = ExtractDetail(arguments, _fileTools);
         var friendly = FriendlyName(_inner.Name);
 
         await _output.ToolStartedAsync(friendly, detail);
@@ -94,23 +96,26 @@ public sealed class ToolProgressWrapper : AIFunction
         ["CheckJournalExists"] = "Checking journal",
     };
 
-    private static string? ExtractDetail(AIFunctionArguments arguments)
+    private static string? ExtractDetail(AIFunctionArguments arguments, Tools.FileTools? fileTools)
     {
         // Primary: extract file/directory path and make it relative
         foreach (var key in PrimaryFileKeys)
         {
             if (arguments.TryGetValue(key, out var value) && ExtractString(value) is { Length: > 0 } s)
             {
-                var root = Tools.FileTools.RootDirectory;
-                if (root.Length > 0)
+                if (fileTools is not null)
                 {
-                    var resolved = Tools.FileTools.ResolveSafePath(s);
-                    if (resolved is not null)
+                    var root = fileTools.RootDirectory;
+                    if (root.Length > 0)
                     {
-                        var relative = Path.GetRelativePath(root, resolved).Replace('\\', '/');
-                        if (relative != ".")
+                        var resolved = fileTools.ResolveSafePath(s);
+                        if (resolved is not null)
                         {
-                            return AppendSecondaryDetail(relative, arguments);
+                            var relative = Path.GetRelativePath(root, resolved).Replace('\\', '/');
+                            if (relative != ".")
+                            {
+                                return AppendSecondaryDetail(relative, arguments);
+                            }
                         }
                     }
                 }
@@ -166,10 +171,10 @@ public static class ToolProgressExtensions
     /// Always wraps regardless of interactive/headless mode so that tool call
     /// counting works in both modes.
     /// </summary>
-    public static IList<AITool> WithProgress(this IList<AITool> tools, IAgentOutput output)
+    public static IList<AITool> WithProgress(this IList<AITool> tools, IAgentOutput output, Tools.FileTools? fileTools = null)
     {
         return tools.Select(tool => tool is AIFunction func
-            ? new ToolProgressWrapper(func, output)
+            ? new ToolProgressWrapper(func, output, fileTools)
             : tool).ToList();
     }
 }

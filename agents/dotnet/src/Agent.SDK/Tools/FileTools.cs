@@ -8,27 +8,46 @@ using Markdig.Syntax.Inlines;
 namespace Agent.SDK.Tools;
 
 /// <summary>
-/// Shared file system tools available to any agent. Each public static method
+/// Shared file system tools available to any agent. Each public method
 /// becomes an AIFunction via <c>AIFunctionFactory.Create</c>.
 /// <para>
 /// All path-accepting methods are sandboxed to <see cref="RootDirectory"/>.
-/// Set it before calling any tool method.
+/// Create an instance with the target directory before calling any tool method.
 /// </para>
 /// </summary>
-public static class FileTools
+public sealed class FileTools
 {
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseYamlFrontMatter()
         .Build();
 
     /// <summary>Root directory the agent is allowed to operate within.</summary>
-    public static string RootDirectory { get; set; } = string.Empty;
+    public string RootDirectory { get; }
 
     /// <summary>
     /// Directory to exclude from listing operations (e.g., the scanner output directory).
     /// Prevents scanners from reading their own stale output as input.
     /// </summary>
-    public static string ExcludeDirectory { get; set; } = string.Empty;
+    public string ExcludeDirectory { get; }
+
+    private readonly HashSet<string> _listedDirectories = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _readFiles = new(StringComparer.OrdinalIgnoreCase);
+
+    public FileTools(string rootDirectory, string excludeDirectory = "")
+    {
+        RootDirectory = rootDirectory;
+        ExcludeDirectory = excludeDirectory;
+    }
+
+    /// <summary>
+    /// Clears read-tracking state so tools can be reused across scanner runs
+    /// without returning stale "already read" messages.
+    /// </summary>
+    public void ResetReadTracking()
+    {
+        _listedDirectories.Clear();
+        _readFiles.Clear();
+    }
 
     /// <summary>
     /// Walks up from <paramref name="startPath"/> to find the nearest directory
@@ -51,7 +70,7 @@ public static class FileTools
     }
 
     [Description("Lists all markdown (.md) files in the specified directory, recursively. Returns one relative path per line.")]
-    public static string ListMarkdownFiles(
+    public string ListMarkdownFiles(
         [Description("Absolute path to the directory to scan")] string directoryPath)
     {
         var resolved = ResolveSafePath(directoryPath);
@@ -63,6 +82,11 @@ public static class FileTools
         if (!Directory.Exists(resolved))
         {
             return $"Error: directory '{resolved}' does not exist.";
+        }
+
+        if (!_listedDirectories.Add(resolved))
+        {
+            return "Already listed. Use the file paths from the first call. Proceed to read each file, then compose and call WriteOutput.";
         }
 
         var files = Directory.EnumerateFiles(resolved, "*.md", SearchOption.AllDirectories)
@@ -80,7 +104,7 @@ public static class FileTools
     }
 
     [Description("Reads the full text content of a file. Returns the content as a string, truncated at 100 KB if the file is very large.")]
-    public static string ReadFileContent(
+    public string ReadFileContent(
         [Description("Path to the file to read, relative to the root directory or absolute")] string filePath)
     {
         var resolved = ResolveSafePath(filePath);
@@ -92,6 +116,11 @@ public static class FileTools
         if (!File.Exists(resolved))
         {
             return $"Error: file '{resolved}' does not exist.";
+        }
+
+        if (!_readFiles.Add(resolved))
+        {
+            return $"Already read '{filePath}'. Use the content from the first read. Do not re-read files — proceed with your next step or call WriteOutput.";
         }
 
         const int maxChars = 100 * 1024;
@@ -178,7 +207,7 @@ public static class FileTools
     }
 
     [Description("Writes text content to a file. Creates parent directories if needed. Returns a confirmation message.")]
-    public static string WriteOutput(
+    public string WriteOutput(
         [Description("Absolute or root-relative path for the output file")] string filePath,
         [Description("The text content to write")] string content)
     {
@@ -199,26 +228,51 @@ public static class FileTools
     }
 
     /// <summary>
+    /// Directory segments that are always skipped during recursive enumeration.
+    /// Only VCS/IDE internals — keep this minimal so LLM context files
+    /// (e.g. <c>copilot-instructions.md</c>, <c>CLAUDE.md</c>) are never missed.
+    /// </summary>
+    private static readonly HashSet<string> ExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", ".hg", ".svn", ".vs",
+    };
+
+    /// <summary>
+    /// Returns <c>true</c> if the file should be skipped — either because it
+    /// falls within <see cref="ExcludeDirectory"/> or resides under a
+    /// VCS/IDE internal directory (e.g. <c>.git</c>, <c>.vs</c>).
+    /// </summary>
+    public bool IsExcluded(string absolutePath)
+    {
+        var fileFull = Path.GetFullPath(absolutePath);
+
+        if (!string.IsNullOrEmpty(ExcludeDirectory))
+        {
+            var excludeFull = Path.GetFullPath(ExcludeDirectory);
+            if (fileFull.StartsWith(excludeFull, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        // Walk the path segments looking for excluded directory names.
+        var relative = Path.GetRelativePath(RootDirectory, fileFull);
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        {
+            if (ExcludedDirectoryNames.Contains(segment))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Resolves a path (absolute or relative) and validates it falls within <see cref="RootDirectory"/>.
     /// Returns the full resolved path, or <c>null</c> if the path escapes the root.
     /// </summary>
-    /// <summary>
-    /// Returns <c>true</c> if the file falls within <see cref="ExcludeDirectory"/>.
-    /// Used by listing tools to skip scanner output files from previous runs.
-    /// </summary>
-    public static bool IsExcluded(string absolutePath)
-    {
-        if (string.IsNullOrEmpty(ExcludeDirectory))
-        {
-            return false;
-        }
-
-        var excludeFull = Path.GetFullPath(ExcludeDirectory);
-        var fileFull = Path.GetFullPath(absolutePath);
-        return fileFull.StartsWith(excludeFull, StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static string? ResolveSafePath(string path)
+    public string? ResolveSafePath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {

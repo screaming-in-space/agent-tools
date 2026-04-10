@@ -8,8 +8,15 @@ namespace Agent.SDK.Tools;
 /// Tools for extracting comments and code patterns from source files.
 /// Supports C#, SQL, Python, TypeScript/JavaScript, and shell scripts.
 /// </summary>
-public static class CodeCommentTools
+public class CodeCommentTools
 {
+    private readonly FileTools _fileTools;
+
+    public CodeCommentTools(FileTools fileTools)
+    {
+        _fileTools = fileTools;
+    }
+
     private static readonly Dictionary<string, string> ExtensionToLanguage = new(StringComparer.OrdinalIgnoreCase)
     {
         [".cs"] = "csharp",
@@ -49,11 +56,11 @@ public static class CodeCommentTools
     ];
 
     [Description("Discovers source files recursively in a directory. Auto-detects language from file extensions. Returns file paths with detected language.")]
-    public static string ListSourceFiles(
+    public string ListSourceFiles(
         [Description("Absolute path to the directory to scan")] string directoryPath,
         [Description("Comma-separated file extensions to include (e.g. '.cs,.sql'). If empty, discovers all known source types.")] string extensions = "")
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -74,7 +81,7 @@ public static class CodeCommentTools
         }
 
         var files = Directory.EnumerateFiles(resolved, "*.*", SearchOption.AllDirectories)
-            .Where(f => !FileTools.IsExcluded(f))
+            .Where(f => !_fileTools.IsExcluded(f))
             .Where(f =>
             {
                 var ext = Path.GetExtension(f);
@@ -89,7 +96,7 @@ public static class CodeCommentTools
             {
                 var ext = Path.GetExtension(f);
                 var lang = ExtensionToLanguage.GetValueOrDefault(ext, "unknown");
-                var rel = Path.GetRelativePath(FileTools.RootDirectory, f).Replace('\\', '/');
+                var rel = Path.GetRelativePath(_fileTools.RootDirectory, f).Replace('\\', '/');
                 return $"{rel} [{lang}]";
             })
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
@@ -119,10 +126,10 @@ public static class CodeCommentTools
     }
 
     [Description("Extracts comments from a source file. Handles XML doc comments (///), C-style (//, /* */), SQL (--), Python (#, triple-quotes), and shell (#). Returns structured output with doc comments, inline comments, and TODO/FIXME markers.")]
-    public static string ExtractComments(
+    public string ExtractComments(
         [Description("Path to the source file, relative or absolute")] string filePath)
     {
-        var resolved = FileTools.ResolveSafePath(filePath);
+        var resolved = _fileTools.ResolveSafePath(filePath);
         if (resolved is null)
         {
             return $"Error: path '{filePath}' is outside the allowed root directory.";
@@ -174,7 +181,7 @@ public static class CodeCommentTools
                 return $"Language '{lang}' not supported for comment extraction.";
         }
 
-        var rel = Path.GetRelativePath(FileTools.RootDirectory, resolved).Replace('\\', '/');
+        var rel = Path.GetRelativePath(_fileTools.RootDirectory, resolved).Replace('\\', '/');
         var sb = new StringBuilder();
         sb.AppendLine($"## {rel} [{lang}]");
         sb.AppendLine($"Lines: {lines.Length}");
@@ -218,10 +225,10 @@ public static class CodeCommentTools
     }
 
     [Description("Scans a directory for architectural code patterns: DI registrations (builder.Services.Add*), base classes, interfaces, attributes, and naming conventions. Returns a pattern summary.")]
-    public static string ExtractCodePatterns(
+    public string ExtractCodePatterns(
         [Description("Absolute path to the directory to scan")] string directoryPath)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -233,7 +240,7 @@ public static class CodeCommentTools
         }
 
         var csFiles = Directory.EnumerateFiles(resolved, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !FileTools.IsExcluded(f))
+            .Where(f => !_fileTools.IsExcluded(f))
             .ToList();
         if (csFiles.Count == 0)
         {

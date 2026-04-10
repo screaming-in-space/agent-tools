@@ -6,12 +6,13 @@ namespace Agent.SDK.Tests;
 public sealed class FileToolsTests : IDisposable
 {
     private readonly string _root;
+    private readonly FileTools _fileTools;
 
     public FileToolsTests()
     {
         _root = Path.Combine(Path.GetTempPath(), $"sdk-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
-        FileTools.RootDirectory = _root;
+        _fileTools = new FileTools(_root);
     }
 
     public void Dispose()
@@ -32,7 +33,7 @@ public sealed class FileToolsTests : IDisposable
         WriteFile("docs/sub/NOTES.md", "# Notes");
         WriteFile("src/Program.cs", "// not markdown");
 
-        var result = FileTools.ListMarkdownFiles(_root);
+        var result = _fileTools.ListMarkdownFiles(_root);
 
         Assert.Contains("README.md", result);
         Assert.Contains("docs/DESIGN.md", result);
@@ -44,7 +45,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ListMarkdownFiles_EmptyDirectory_ReportsNone()
     {
-        var result = FileTools.ListMarkdownFiles(_root);
+        var result = _fileTools.ListMarkdownFiles(_root);
 
         Assert.Contains("No markdown files found", result);
     }
@@ -52,7 +53,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ListMarkdownFiles_OutsideRoot_ReturnsError()
     {
-        var result = FileTools.ListMarkdownFiles(Path.Combine(_root, "..", ".."));
+        var result = _fileTools.ListMarkdownFiles(Path.Combine(_root, "..", ".."));
 
         Assert.StartsWith("Error:", result);
     }
@@ -60,7 +61,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ListMarkdownFiles_NonexistentDirectory_ReturnsError()
     {
-        var result = FileTools.ListMarkdownFiles(Path.Combine(_root, "nope"));
+        var result = _fileTools.ListMarkdownFiles(Path.Combine(_root, "nope"));
 
         Assert.Contains("does not exist", result);
     }
@@ -72,7 +73,7 @@ public sealed class FileToolsTests : IDisposable
     {
         WriteFile("test.md", "# Hello\n\nWorld");
 
-        var result = FileTools.ReadFileContent("test.md");
+        var result = _fileTools.ReadFileContent("test.md");
 
         Assert.Contains("# Hello", result);
         Assert.Contains("World", result);
@@ -83,7 +84,7 @@ public sealed class FileToolsTests : IDisposable
     {
         WriteFile("abs.md", "absolute content");
 
-        var result = FileTools.ReadFileContent(Path.Combine(_root, "abs.md"));
+        var result = _fileTools.ReadFileContent(Path.Combine(_root, "abs.md"));
 
         Assert.Contains("absolute content", result);
     }
@@ -91,7 +92,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ReadFileContent_PathTraversal_ReturnsError()
     {
-        var result = FileTools.ReadFileContent("../../etc/passwd");
+        var result = _fileTools.ReadFileContent("../../etc/passwd");
 
         Assert.StartsWith("Error:", result);
     }
@@ -99,7 +100,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ReadFileContent_NonexistentFile_ReturnsError()
     {
-        var result = FileTools.ReadFileContent("missing.md");
+        var result = _fileTools.ReadFileContent("missing.md");
 
         Assert.Contains("does not exist", result);
     }
@@ -110,7 +111,7 @@ public sealed class FileToolsTests : IDisposable
         var content = new string('x', 200 * 1024);
         WriteFile("big.md", content);
 
-        var result = FileTools.ReadFileContent("big.md");
+        var result = _fileTools.ReadFileContent("big.md");
 
         Assert.Contains("Truncated", result);
         Assert.True(result.Length < content.Length);
@@ -215,7 +216,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void WriteOutput_CreatesFile()
     {
-        var result = FileTools.WriteOutput("output.md", "# Output");
+        var result = _fileTools.WriteOutput("output.md", "# Output");
 
         Assert.Contains("Wrote", result);
         Assert.True(File.Exists(Path.Combine(_root, "output.md")));
@@ -225,7 +226,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void WriteOutput_CreatesParentDirectories()
     {
-        var result = FileTools.WriteOutput("deep/nested/output.md", "content");
+        var result = _fileTools.WriteOutput("deep/nested/output.md", "content");
 
         Assert.Contains("Wrote", result);
         Assert.True(File.Exists(Path.Combine(_root, "deep", "nested", "output.md")));
@@ -234,7 +235,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void WriteOutput_PathTraversal_ReturnsError()
     {
-        var result = FileTools.WriteOutput("../../evil.md", "bad");
+        var result = _fileTools.WriteOutput("../../evil.md", "bad");
 
         Assert.StartsWith("Error:", result);
     }
@@ -244,7 +245,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ResolveSafePath_RelativePath_ResolvesWithinRoot()
     {
-        var result = FileTools.ResolveSafePath("docs/file.md");
+        var result = _fileTools.ResolveSafePath("docs/file.md");
 
         Assert.NotNull(result);
         Assert.StartsWith(_root, result, StringComparison.OrdinalIgnoreCase);
@@ -253,7 +254,7 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ResolveSafePath_TraversalAttempt_ReturnsNull()
     {
-        var result = FileTools.ResolveSafePath("../../../etc/passwd");
+        var result = _fileTools.ResolveSafePath("../../../etc/passwd");
 
         Assert.Null(result);
     }
@@ -261,9 +262,48 @@ public sealed class FileToolsTests : IDisposable
     [Fact]
     public void ResolveSafePath_EmptyString_ReturnsNull()
     {
-        var result = FileTools.ResolveSafePath("");
+        var result = _fileTools.ResolveSafePath("");
 
         Assert.Null(result);
+    }
+
+    // ── Read-tracking ──
+
+    [Fact]
+    public void ListMarkdownFiles_SecondCall_ReturnsAlreadyListed()
+    {
+        WriteFile("README.md", "# Root");
+
+        var first = _fileTools.ListMarkdownFiles(_root);
+        var second = _fileTools.ListMarkdownFiles(_root);
+
+        Assert.Contains("Found 1 markdown files", first);
+        Assert.Contains("Already listed", second);
+    }
+
+    [Fact]
+    public void ReadFileContent_SecondCall_ReturnsAlreadyRead()
+    {
+        WriteFile("README.md", "# Root");
+
+        var first = _fileTools.ReadFileContent("README.md");
+        var second = _fileTools.ReadFileContent("README.md");
+
+        Assert.Contains("# Root", first);
+        Assert.Contains("Already read", second);
+    }
+
+    [Fact]
+    public void ResetReadTracking_AllowsReRead()
+    {
+        WriteFile("README.md", "# Root");
+
+        var first = _fileTools.ReadFileContent("README.md");
+        _fileTools.ResetReadTracking();
+        var second = _fileTools.ReadFileContent("README.md");
+
+        Assert.Contains("# Root", first);
+        Assert.Contains("# Root", second);
     }
 
     // ── Helpers ──

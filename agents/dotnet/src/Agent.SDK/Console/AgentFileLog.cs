@@ -3,20 +3,21 @@ using System.Text;
 namespace Agent.SDK.Console;
 
 /// <summary>
-/// Base class for agent log files. Manages a buffered <see cref="StreamWriter"/>
-/// with <see cref="SemaphoreSlim"/> synchronization and optional rotation.
-/// Subclasses provide the filename, header, and specific write methods.
+/// Manages a buffered <see cref="StreamWriter"/> to a single log file with
+/// <see cref="SemaphoreSlim"/> synchronization and optional rotation.
+/// Construct one instance per log file; the static facades
+/// (<see cref="AgentDebugLog"/>, <see cref="AgentErrorLog"/>) own their own instance.
 /// </summary>
-public abstract class AgentFileLog : IAsyncDisposable
+public sealed class AgentFileLog(
+    string fileName,
+    string headerLabel,
+    bool autoFlush,
+    long maxBytesBeforeRotation = 0) : IAsyncDisposable
 {
     private StreamWriter? _writer;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    protected abstract string FileName { get; }
-    protected abstract string HeaderLabel { get; }
-    protected abstract bool AutoFlush { get; }
-    protected virtual long MaxBytesBeforeRotation => 0;
-
+    /// <summary>Opens (or re-opens) the log file in <paramref name="outputDirectory"/>.</summary>
     public async Task InitializeAsync(string outputDirectory)
     {
         await _lock.WaitAsync().ConfigureAwait(false);
@@ -29,11 +30,11 @@ public abstract class AgentFileLog : IAsyncDisposable
                 Directory.CreateDirectory(outputDirectory);
             }
 
-            var logPath = Path.Combine(outputDirectory, FileName);
+            var logPath = Path.Combine(outputDirectory, fileName);
             RotateIfNeeded(logPath);
 
-            _writer = new StreamWriter(logPath, append: false, Encoding.UTF8) { AutoFlush = AutoFlush };
-            await _writer.WriteLineAsync($"=== {HeaderLabel} — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===").ConfigureAwait(false);
+            _writer = new StreamWriter(logPath, append: false, Encoding.UTF8) { AutoFlush = autoFlush };
+            await _writer.WriteLineAsync($"=== {headerLabel} — {DateTime.Now:yyyy-MM-dd HH:mm:ss.ffffff zzz} ===").ConfigureAwait(false);
             await _writer.WriteLineAsync().ConfigureAwait(false);
         }
         finally
@@ -42,7 +43,8 @@ public abstract class AgentFileLog : IAsyncDisposable
         }
     }
 
-    protected async Task WriteLineAsync(string text)
+    /// <summary>Writes a line of text followed by a newline.</summary>
+    public async Task WriteLineAsync(string text)
     {
         await _lock.WaitAsync().ConfigureAwait(false);
         try
@@ -58,16 +60,38 @@ public abstract class AgentFileLog : IAsyncDisposable
         }
     }
 
-    protected void WriteDirect(string text)
+    /// <summary>Writes text without appending a newline.</summary>
+    public async Task WriteAsync(string text)
     {
-        try { _writer?.Write(text); }
-        catch { /* best effort */ }
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_writer is not null)
+            {
+                await _writer.WriteAsync(text).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
-    protected void FlushDirect()
+    /// <summary>Flushes the underlying stream to disk.</summary>
+    public async Task FlushAsync()
     {
-        try { _writer?.Flush(); }
-        catch { /* best effort */ }
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_writer is not null)
+            {
+                await _writer.FlushAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -91,11 +115,11 @@ public abstract class AgentFileLog : IAsyncDisposable
 
     private void RotateIfNeeded(string logPath)
     {
-        if (MaxBytesBeforeRotation <= 0) { return; }
+        if (maxBytesBeforeRotation <= 0) { return; }
 
         try
         {
-            if (File.Exists(logPath) && new FileInfo(logPath).Length > MaxBytesBeforeRotation)
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > maxBytesBeforeRotation)
             {
                 var prevPath = Path.ChangeExtension(logPath, ".prev.log");
                 File.Copy(logPath, prevPath, overwrite: true);
@@ -104,6 +128,7 @@ public abstract class AgentFileLog : IAsyncDisposable
         catch { /* best effort */ }
     }
 
+    /// <summary>Truncates <paramref name="s"/> to <paramref name="max"/> characters with an ellipsis.</summary>
     public static string? Truncate(string? s, int max)
         => s is null ? null : s.Length <= max ? s : s[..max] + "...";
 }

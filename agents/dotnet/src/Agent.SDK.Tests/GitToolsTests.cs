@@ -7,15 +7,13 @@ namespace Agent.SDK.Tests;
 /// Tests skip gracefully if the repo root cannot be found.
 /// </summary>
 [Collection("FileTools")]
-public sealed class GitToolsTests : IDisposable
+public sealed class GitToolsTests
 {
     private readonly string? _repoRoot;
-    private readonly string _previousRoot;
+    private readonly GitTools? _tools;
 
     public GitToolsTests()
     {
-        _previousRoot = FileTools.RootDirectory;
-
         // Walk up from bin output to find the repo root (.git directory)
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, ".git")))
@@ -26,13 +24,9 @@ public sealed class GitToolsTests : IDisposable
         _repoRoot = dir?.FullName;
         if (_repoRoot is not null)
         {
-            FileTools.RootDirectory = _repoRoot;
+            var fileTools = new FileTools(_repoRoot);
+            _tools = new GitTools(fileTools);
         }
-    }
-
-    public void Dispose()
-    {
-        FileTools.RootDirectory = _previousRoot;
     }
 
     // ── GetGitLog ──
@@ -42,7 +36,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitLog(_repoRoot, maxCount: 10);
+        var result = _tools!.GetGitLog(_repoRoot, maxCount: 10);
 
         Assert.Contains("Git Log", result, StringComparison.Ordinal);
         Assert.Contains("commits", result, StringComparison.Ordinal);
@@ -55,7 +49,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitLog(_repoRoot, maxCount: 3);
+        var result = _tools!.GetGitLog(_repoRoot, maxCount: 3);
 
         Assert.Contains("Git Log", result, StringComparison.Ordinal);
         // Count the commit lines (each starts with "- `")
@@ -70,7 +64,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitLog(_repoRoot, since: "2099-01-01");
+        var result = _tools!.GetGitLog(_repoRoot, since: "2099-01-01");
 
         Assert.Contains("No commits found", result, StringComparison.Ordinal);
     }
@@ -80,7 +74,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitLog(Path.Combine(_repoRoot, "..", ".."));
+        var result = _tools!.GetGitLog(Path.Combine(_repoRoot, "..", ".."));
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -92,7 +86,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitStats(_repoRoot);
+        var result = _tools!.GetGitStats(_repoRoot);
 
         Assert.Contains("Git Stats", result, StringComparison.Ordinal);
         Assert.Contains("commits analyzed", result, StringComparison.Ordinal);
@@ -105,7 +99,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitStats(_repoRoot);
+        var result = _tools!.GetGitStats(_repoRoot);
 
         Assert.Contains("Date range:", result, StringComparison.Ordinal);
     }
@@ -115,7 +109,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitStats(_repoRoot);
+        var result = _tools!.GetGitStats(_repoRoot);
 
         Assert.Contains("Churn Hotspots", result, StringComparison.Ordinal);
     }
@@ -125,7 +119,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitStats(_repoRoot, since: "2099-01-01");
+        var result = _tools!.GetGitStats(_repoRoot, since: "2099-01-01");
 
         Assert.Contains("No commits found", result, StringComparison.Ordinal);
     }
@@ -138,11 +132,11 @@ public sealed class GitToolsTests : IDisposable
         if (_repoRoot is null) return;
 
         // Get the latest commit SHA from the log
-        var log = GitTools.GetGitLog(_repoRoot, maxCount: 5);
+        var log = _tools!.GetGitLog(_repoRoot, maxCount: 5);
         var sha = ExtractFirstSha(log);
         if (sha is null) return;
 
-        var result = GitTools.GetGitDiff(_repoRoot, sha);
+        var result = _tools!.GetGitDiff(_repoRoot, sha);
 
         Assert.Contains("Diff for", result, StringComparison.Ordinal);
         Assert.Contains("Author:", result, StringComparison.Ordinal);
@@ -153,7 +147,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitDiff(_repoRoot, "0000000000000000000000000000000000000000");
+        var result = _tools!.GetGitDiff(_repoRoot, "0000000000000000000000000000000000000000");
 
         Assert.Contains("Error", result, StringComparison.Ordinal);
     }
@@ -163,7 +157,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.GetGitDiff(Path.Combine(_repoRoot, "..", ".."), "abc123");
+        var result = _tools!.GetGitDiff(Path.Combine(_repoRoot, "..", ".."), "abc123");
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -175,7 +169,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.CheckJournalExists(
+        var result = _tools!.CheckJournalExists(
             Path.Combine(_repoRoot, "nonexistent-journal-dir"),
             "2026-01-01");
 
@@ -188,7 +182,7 @@ public sealed class GitToolsTests : IDisposable
         if (_repoRoot is null) return;
 
         // Use the repo root itself -- unlikely to have journal files matching this date
-        var result = GitTools.CheckJournalExists(_repoRoot, "1999-12-31");
+        var result = _tools!.CheckJournalExists(_repoRoot, "1999-12-31");
 
         Assert.Equal("false", result);
     }
@@ -205,7 +199,7 @@ public sealed class GitToolsTests : IDisposable
             Directory.CreateDirectory(journalDir);
             File.WriteAllText(Path.Combine(journalDir, "2026-04-10_summary.md"), "# Journal");
 
-            var result = GitTools.CheckJournalExists(journalDir, "2026-04-10");
+            var result = _tools!.CheckJournalExists(journalDir, "2026-04-10");
 
             Assert.StartsWith("true", result, StringComparison.Ordinal);
         }
@@ -223,7 +217,7 @@ public sealed class GitToolsTests : IDisposable
     {
         if (_repoRoot is null) return;
 
-        var result = GitTools.CheckJournalExists(
+        var result = _tools!.CheckJournalExists(
             Path.Combine(_repoRoot, "..", ".."),
             "2026-01-01");
 

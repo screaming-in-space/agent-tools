@@ -7,10 +7,10 @@ namespace Agent.SDK.Tests;
 /// agent-tools repo root (two levels above the workspace).
 /// </summary>
 [Collection("FileTools")]
-public sealed class IntegrationFileToolsTests : IDisposable
+public sealed class IntegrationFileToolsTests
 {
     private readonly string _repoRoot;
-    private readonly string _previousRoot;
+    private readonly FileTools _fileTools;
 
     public IntegrationFileToolsTests()
     {
@@ -23,21 +23,13 @@ public sealed class IntegrationFileToolsTests : IDisposable
 
         _repoRoot = dir?.FullName ?? throw new DirectoryNotFoundException(
             $"Could not find git repo root from {AppContext.BaseDirectory}");
-        _previousRoot = FileTools.RootDirectory;
-        FileTools.RootDirectory = _repoRoot;
-        FileTools.ExcludeDirectory = string.Empty;
-    }
-
-    public void Dispose()
-    {
-        FileTools.RootDirectory = _previousRoot;
-        FileTools.ExcludeDirectory = string.Empty;
+        _fileTools = new FileTools(_repoRoot);
     }
 
     [Fact]
     public void ListMarkdownFiles_FindsKnownRepoFiles()
     {
-        var result = FileTools.ListMarkdownFiles(_repoRoot);
+        var result = _fileTools.ListMarkdownFiles(_repoRoot);
 
         Assert.Contains("README.md", result);
         Assert.Contains("context/RULES.md", result);
@@ -48,7 +40,7 @@ public sealed class IntegrationFileToolsTests : IDisposable
     [Fact]
     public void ReadFileContent_ReadsRepoReadme()
     {
-        var result = FileTools.ReadFileContent(Path.Combine(_repoRoot, "README.md"));
+        var result = _fileTools.ReadFileContent(Path.Combine(_repoRoot, "README.md"));
 
         Assert.DoesNotContain("Error:", result);
         Assert.True(result.Length > 0);
@@ -57,7 +49,7 @@ public sealed class IntegrationFileToolsTests : IDisposable
     [Fact]
     public void ExtractStructure_ParsesRepoReadme()
     {
-        var content = FileTools.ReadFileContent(Path.Combine(_repoRoot, "README.md"));
+        var content = _fileTools.ReadFileContent(Path.Combine(_repoRoot, "README.md"));
 
         var structure = FileTools.ExtractStructure(content);
 
@@ -70,7 +62,7 @@ public sealed class IntegrationFileToolsTests : IDisposable
     [Fact]
     public void ListMarkdownFiles_CountMatchesFileSystem()
     {
-        var result = FileTools.ListMarkdownFiles(_repoRoot);
+        var result = _fileTools.ListMarkdownFiles(_repoRoot);
 
         var actual = Directory.EnumerateFiles(_repoRoot, "*.md", SearchOption.AllDirectories).Count();
         Assert.Contains($"Found {actual} markdown files", result);
@@ -79,7 +71,7 @@ public sealed class IntegrationFileToolsTests : IDisposable
     [Fact]
     public void ReadFileContent_RelativePath_ReadsRulesDoc()
     {
-        var result = FileTools.ReadFileContent("context/RULES.md");
+        var result = _fileTools.ReadFileContent("context/RULES.md");
 
         Assert.False(result.StartsWith("Error:", StringComparison.Ordinal), $"Expected file content but got: {result[..Math.Min(result.Length, 200)]}");
         Assert.True(result.Length > 0);
@@ -88,7 +80,7 @@ public sealed class IntegrationFileToolsTests : IDisposable
     [Fact]
     public void ExtractStructure_RulesDoc_ContainsLinks()
     {
-        var content = FileTools.ReadFileContent("context/RULES.md");
+        var content = _fileTools.ReadFileContent("context/RULES.md");
 
         var structure = FileTools.ExtractStructure(content);
 

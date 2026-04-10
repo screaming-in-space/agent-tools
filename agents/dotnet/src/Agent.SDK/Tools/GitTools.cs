@@ -7,16 +7,23 @@ namespace Agent.SDK.Tools;
 /// <summary>
 /// Git history analysis tools using LibGit2Sharp. Reads commit logs, diffs, and statistics.
 /// </summary>
-public static class GitTools
+public class GitTools
 {
+    private readonly FileTools _fileTools;
+
+    public GitTools(FileTools fileTools)
+    {
+        _fileTools = fileTools;
+    }
+
     [Description("Reads git commit log for a repository. Returns SHA, author, date, message, and files changed count. Optionally filters by date range.")]
-    public static string GetGitLog(
+    public string GetGitLog(
         [Description("Absolute path to the git repository root")] string directoryPath,
         [Description("Only include commits after this date (ISO format, e.g. 2026-01-01). Empty string for no filter.")] string since = "",
         [Description("Only include commits before this date (ISO format, e.g. 2026-12-31). Empty string for no filter.")] string until = "",
         [Description("Maximum number of commits to return. Default 100.")] int maxCount = 100)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -87,11 +94,11 @@ public static class GitTools
     }
 
     [Description("Gets the diff for a specific commit. Returns files added, modified, and deleted with line change counts.")]
-    public static string GetGitDiff(
+    public string GetGitDiff(
         [Description("Absolute path to the git repository root")] string directoryPath,
         [Description("SHA of the commit to diff (short or full)")] string commitSha)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -184,12 +191,12 @@ public static class GitTools
     }
 
     [Description("Aggregates git stats: commits per day, files most frequently changed, authors, and churn hotspots. Optionally filters by date range.")]
-    public static string GetGitStats(
+    public string GetGitStats(
         [Description("Absolute path to the git repository root")] string directoryPath,
         [Description("Only include commits after this date (ISO format). Empty string for no filter.")] string since = "",
         [Description("Only include commits before this date (ISO format). Empty string for no filter.")] string until = "")
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -300,11 +307,11 @@ public static class GitTools
     }
 
     [Description("Checks if a journal entry already exists for a given date. Returns true/false and the path if it exists.")]
-    public static string CheckJournalExists(
+    public string CheckJournalExists(
         [Description("Absolute path to the journal output directory")] string directoryPath,
         [Description("Date to check in YYYY-MM-DD format")] string date)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -321,7 +328,7 @@ public static class GitTools
 
         if (matches.Count > 0)
         {
-            var paths = matches.Select(m => Path.GetRelativePath(FileTools.RootDirectory, m).Replace('\\', '/'));
+            var paths = matches.Select(m => Path.GetRelativePath(_fileTools.RootDirectory, m).Replace('\\', '/'));
             return $"true ({string.Join(", ", paths)})";
         }
 

@@ -7,19 +7,15 @@ namespace Agent.SDK.Tests;
 public sealed class ToolProgressWrapperTests : IDisposable
 {
     private readonly string _root;
-    private readonly string _previousRoot;
 
     public ToolProgressWrapperTests()
     {
         _root = Path.Combine(Path.GetTempPath(), $"wrapper-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
-        _previousRoot = FileTools.RootDirectory;
-        FileTools.RootDirectory = _root;
     }
 
     public void Dispose()
     {
-        FileTools.RootDirectory = _previousRoot;
         if (Directory.Exists(_root))
         {
             Directory.Delete(_root, recursive: true);

@@ -9,19 +9,19 @@ namespace Agent.SDK.Tests;
 public sealed class StructureToolsTests : IDisposable
 {
     private readonly string _root;
-    private readonly string _previousRoot;
+    private FileTools _fileTools;
+    private StructureTools _tools;
 
     public StructureToolsTests()
     {
         _root = Path.Combine(Path.GetTempPath(), $"structure-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
-        _previousRoot = FileTools.RootDirectory;
-        FileTools.RootDirectory = _root;
+        _fileTools = new FileTools(_root);
+        _tools = new StructureTools(_fileTools);
     }
 
     public void Dispose()
     {
-        FileTools.RootDirectory = _previousRoot;
         if (Directory.Exists(_root))
         {
             Directory.Delete(_root, recursive: true);
@@ -36,7 +36,7 @@ public sealed class StructureToolsTests : IDisposable
         WriteCsproj("src/App/App.csproj", outputType: "Exe", tfm: "net10.0");
         WriteCsproj("src/Lib/Lib.csproj", outputType: "Library", tfm: "net10.0");
 
-        var result = StructureTools.ListProjects(_root);
+        var result = _tools.ListProjects(_root);
 
         Assert.Contains("Projects (2)", result, StringComparison.Ordinal);
         Assert.Contains("App", result, StringComparison.Ordinal);
@@ -47,7 +47,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void ListProjects_EmptyDirectory_ReturnsNoneMessage()
     {
-        var result = StructureTools.ListProjects(_root);
+        var result = _tools.ListProjects(_root);
 
         Assert.Contains("No .NET project or solution files found", result, StringComparison.Ordinal);
     }
@@ -55,7 +55,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void ListProjects_NonexistentDirectory_ReturnsError()
     {
-        var result = StructureTools.ListProjects(Path.Combine(_root, "nope"));
+        var result = _tools.ListProjects(Path.Combine(_root, "nope"));
 
         Assert.Contains("does not exist", result, StringComparison.Ordinal);
     }
@@ -63,7 +63,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void ListProjects_OutsideRoot_ReturnsError()
     {
-        var result = StructureTools.ListProjects(Path.Combine(_root, "..", ".."));
+        var result = _tools.ListProjects(Path.Combine(_root, "..", ".."));
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -74,7 +74,7 @@ public sealed class StructureToolsTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "Test.sln"), "");
         WriteCsproj("src/App/App.csproj", outputType: "Exe", tfm: "net10.0");
 
-        var result = StructureTools.ListProjects(_root);
+        var result = _tools.ListProjects(_root);
 
         Assert.Contains("Solutions", result, StringComparison.Ordinal);
         Assert.Contains("Test.sln", result, StringComparison.Ordinal);
@@ -88,7 +88,7 @@ public sealed class StructureToolsTests : IDisposable
             packageRefs: ["Newtonsoft.Json"]);
         WriteCsproj("src/Lib/Lib.csproj", outputType: "Library", tfm: "net10.0");
 
-        var result = StructureTools.ListProjects(_root);
+        var result = _tools.ListProjects(_root);
 
         // App should show 1 project ref, 1 package ref
         Assert.Contains("| App | Exe | net10.0 | 1 | 1 |", result, StringComparison.Ordinal);
@@ -102,7 +102,7 @@ public sealed class StructureToolsTests : IDisposable
     {
         WriteCsproj("src/App/App.csproj", outputType: "Exe", tfm: "net10.0");
 
-        var result = StructureTools.ReadProjectFile(Path.Combine(_root, "src", "App", "App.csproj"));
+        var result = _tools.ReadProjectFile(Path.Combine(_root, "src", "App", "App.csproj"));
 
         Assert.Contains("## App", result, StringComparison.Ordinal);
         Assert.Contains("**Output Type:** Exe", result, StringComparison.Ordinal);
@@ -116,7 +116,7 @@ public sealed class StructureToolsTests : IDisposable
         WriteCsproj("src/App/App.csproj", outputType: "Exe", tfm: "net10.0",
             projectRefs: ["../Lib/Lib.csproj"]);
 
-        var result = StructureTools.ReadProjectFile(Path.Combine(_root, "src", "App", "App.csproj"));
+        var result = _tools.ReadProjectFile(Path.Combine(_root, "src", "App", "App.csproj"));
 
         Assert.Contains("Project References", result, StringComparison.Ordinal);
         Assert.Contains("Lib", result, StringComparison.Ordinal);
@@ -128,7 +128,7 @@ public sealed class StructureToolsTests : IDisposable
         WriteCsproj("src/App/App.csproj", outputType: "Library", tfm: "net10.0",
             packageRefs: ["Serilog", "Markdig"]);
 
-        var result = StructureTools.ReadProjectFile(Path.Combine(_root, "src", "App", "App.csproj"));
+        var result = _tools.ReadProjectFile(Path.Combine(_root, "src", "App", "App.csproj"));
 
         Assert.Contains("Package References", result, StringComparison.Ordinal);
         Assert.Contains("Serilog", result, StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void ReadProjectFile_NonexistentFile_ReturnsError()
     {
-        var result = StructureTools.ReadProjectFile(Path.Combine(_root, "missing.csproj"));
+        var result = _tools.ReadProjectFile(Path.Combine(_root, "missing.csproj"));
 
         Assert.Contains("does not exist", result, StringComparison.Ordinal);
     }
@@ -146,7 +146,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void ReadProjectFile_OutsideRoot_ReturnsError()
     {
-        var result = StructureTools.ReadProjectFile(Path.Combine(_root, "..", "..", "evil.csproj"));
+        var result = _tools.ReadProjectFile(Path.Combine(_root, "..", "..", "evil.csproj"));
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -160,7 +160,7 @@ public sealed class StructureToolsTests : IDisposable
             projectRefs: ["../Core/Core.csproj"]);
         WriteCsproj("src/Core/Core.csproj", outputType: "Library", tfm: "net10.0");
 
-        var result = StructureTools.MapDependencyGraph(_root);
+        var result = _tools.MapDependencyGraph(_root);
 
         Assert.Contains("Dependency Graph", result, StringComparison.Ordinal);
         Assert.Contains("App", result, StringComparison.Ordinal);
@@ -170,7 +170,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void MapDependencyGraph_NoProjects_ReturnsMessage()
     {
-        var result = StructureTools.MapDependencyGraph(_root);
+        var result = _tools.MapDependencyGraph(_root);
 
         Assert.Contains("No project files found", result, StringComparison.Ordinal);
     }
@@ -182,7 +182,7 @@ public sealed class StructureToolsTests : IDisposable
             projectRefs: ["../Lib/Lib.csproj"]);
         WriteCsproj("src/Lib/Lib.csproj", outputType: "Library", tfm: "net10.0");
 
-        var result = StructureTools.MapDependencyGraph(_root);
+        var result = _tools.MapDependencyGraph(_root);
 
         Assert.Contains("Leaf projects", result, StringComparison.Ordinal);
         Assert.Contains("Lib", result, StringComparison.Ordinal);
@@ -191,7 +191,7 @@ public sealed class StructureToolsTests : IDisposable
     [Fact]
     public void MapDependencyGraph_OutsideRoot_ReturnsError()
     {
-        var result = StructureTools.MapDependencyGraph(Path.Combine(_root, "..", ".."));
+        var result = _tools.MapDependencyGraph(Path.Combine(_root, "..", ".."));
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -203,7 +203,7 @@ public sealed class StructureToolsTests : IDisposable
     {
         var projectList = "| MyApp | Exe | net10.0 | 0 | 3 |";
 
-        var result = StructureTools.DetectArchitecturePattern(projectList, "");
+        var result = _tools.DetectArchitecturePattern(projectList, "");
 
         Assert.Contains("Monolith", result, StringComparison.Ordinal);
     }
@@ -218,7 +218,7 @@ public sealed class StructureToolsTests : IDisposable
             | MyApp.Api | Exe | net10.0 | 2 | 3 |
             """;
 
-        var result = StructureTools.DetectArchitecturePattern(projectList, "");
+        var result = _tools.DetectArchitecturePattern(projectList, "");
 
         Assert.Contains("N-Tier", result, StringComparison.Ordinal);
     }
@@ -233,7 +233,7 @@ public sealed class StructureToolsTests : IDisposable
             | MyApp.Application | Exe | net10.0 | 2 | 3 |
             """;
 
-        var result = StructureTools.DetectArchitecturePattern(projectList, "");
+        var result = _tools.DetectArchitecturePattern(projectList, "");
 
         Assert.Contains("Hexagonal / Clean", result, StringComparison.Ordinal);
     }
@@ -242,7 +242,7 @@ public sealed class StructureToolsTests : IDisposable
     public void DetectArchitecturePattern_EmptyInput_DetectsMonolith()
     {
         // Empty input has zero .csproj matches, which satisfies projectCount <= 3 => Monolith
-        var result = StructureTools.DetectArchitecturePattern("", "");
+        var result = _tools.DetectArchitecturePattern("", "");
 
         Assert.Contains("Architecture Classification", result, StringComparison.Ordinal);
         Assert.Contains("Monolith", result, StringComparison.Ordinal);
@@ -259,27 +259,22 @@ public sealed class StructureToolsTests : IDisposable
             return; // Skip gracefully if repo root not found
         }
 
-        FileTools.RootDirectory = repoRoot;
-        try
-        {
-            var csprojPath = Path.Combine(repoRoot, "src", "Agent.SDK", "Agent.SDK.csproj");
-            if (!File.Exists(csprojPath))
-            {
-                return; // Skip if file not found
-            }
+        var repoFileTools = new FileTools(repoRoot);
+        var repoTools = new StructureTools(repoFileTools);
 
-            var result = StructureTools.ReadProjectFile(csprojPath);
-
-            Assert.Contains("## Agent.SDK", result, StringComparison.Ordinal);
-            Assert.DoesNotContain("Error:", result, StringComparison.Ordinal);
-            Assert.Contains("Package References", result, StringComparison.Ordinal);
-            Assert.Contains("LibGit2Sharp", result, StringComparison.Ordinal);
-            Assert.Contains("Markdig", result, StringComparison.Ordinal);
-        }
-        finally
+        var csprojPath = Path.Combine(repoRoot, "src", "Agent.SDK", "Agent.SDK.csproj");
+        if (!File.Exists(csprojPath))
         {
-            FileTools.RootDirectory = _root;
+            return; // Skip if file not found
         }
+
+        var result = repoTools.ReadProjectFile(csprojPath);
+
+        Assert.Contains("## Agent.SDK", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("Error:", result, StringComparison.Ordinal);
+        Assert.Contains("Package References", result, StringComparison.Ordinal);
+        Assert.Contains("LibGit2Sharp", result, StringComparison.Ordinal);
+        Assert.Contains("Markdig", result, StringComparison.Ordinal);
     }
 
     // ── Helpers ──

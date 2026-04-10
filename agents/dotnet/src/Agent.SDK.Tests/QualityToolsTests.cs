@@ -6,12 +6,15 @@ namespace Agent.SDK.Tests;
 public sealed class QualityToolsTests : IDisposable
 {
     private readonly string _root;
+    private FileTools _fileTools;
+    private QualityTools _tools;
 
     public QualityToolsTests()
     {
         _root = Path.Combine(Path.GetTempPath(), $"quality-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
-        FileTools.RootDirectory = _root;
+        _fileTools = new FileTools(_root);
+        _tools = new QualityTools(_fileTools);
     }
 
     public void Dispose()
@@ -42,7 +45,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Foo.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Foo.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Foo.cs"));
 
         Assert.Contains("Lines:", result, StringComparison.Ordinal);
         Assert.Contains("Types: 1", result, StringComparison.Ordinal);
@@ -61,7 +64,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Calc.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Calc.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Calc.cs"));
 
         Assert.Contains("### Methods", result, StringComparison.Ordinal);
         Assert.Contains("Add", result, StringComparison.Ordinal);
@@ -83,7 +86,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Svc.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Svc.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Svc.cs"));
 
         Assert.Contains("| A |", result, StringComparison.Ordinal);
         Assert.Contains("| B |", result, StringComparison.Ordinal);
@@ -111,7 +114,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Complex.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Complex.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Complex.cs"));
 
         // Base 1 + 2 ifs = complexity 3
         Assert.Contains("| 3 |", result, StringComparison.Ordinal);
@@ -127,7 +130,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Empty.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Empty.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Empty.cs"));
 
         Assert.DoesNotContain("### Methods", result, StringComparison.Ordinal);
     }
@@ -153,7 +156,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Bad.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Bad.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Bad.cs"));
 
         Assert.Contains("Anti-Patterns", result, StringComparison.Ordinal);
         Assert.Contains("Sync-over-async (Result)", result, StringComparison.Ordinal);
@@ -178,7 +181,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Waiter.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Waiter.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Waiter.cs"));
 
         Assert.Contains("Sync-over-async (Wait)", result, StringComparison.Ordinal);
     }
@@ -201,7 +204,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Handler.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Handler.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Handler.cs"));
 
         Assert.Contains("async void (OnClick)", result, StringComparison.Ordinal);
     }
@@ -225,7 +228,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Swallower.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Swallower.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Swallower.cs"));
 
         Assert.Contains("Empty catch block", result, StringComparison.Ordinal);
     }
@@ -243,7 +246,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Clean.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Clean.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Clean.cs"));
 
         Assert.DoesNotContain("Anti-Patterns", result, StringComparison.Ordinal);
     }
@@ -263,7 +266,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Tiny.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Tiny.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Tiny.cs"));
 
         Assert.Contains("Health Grade: A", result, StringComparison.Ordinal);
     }
@@ -287,7 +290,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("Messy.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "Messy.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "Messy.cs"));
 
         Assert.DoesNotContain("Health Grade: A", result, StringComparison.Ordinal);
     }
@@ -297,7 +300,7 @@ public sealed class QualityToolsTests : IDisposable
     [Fact]
     public void AnalyzeCSharpFile_NonexistentFile_ReturnsError()
     {
-        var result = QualityTools.AnalyzeCSharpFile(Path.Combine(_root, "missing.cs"));
+        var result = _tools.AnalyzeCSharpFile(Path.Combine(_root, "missing.cs"));
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
         Assert.Contains("does not exist", result, StringComparison.Ordinal);
@@ -306,7 +309,7 @@ public sealed class QualityToolsTests : IDisposable
     [Fact]
     public void AnalyzeCSharpFile_PathTraversal_ReturnsError()
     {
-        var result = QualityTools.AnalyzeCSharpFile("../../../etc/passwd");
+        var result = _tools.AnalyzeCSharpFile("../../../etc/passwd");
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -339,7 +342,7 @@ public sealed class QualityToolsTests : IDisposable
         WriteFile("src/A.cs", code1);
         WriteFile("src/B.cs", code2);
 
-        var result = QualityTools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
+        var result = _tools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
 
         Assert.Contains("C# Files | 2", result, StringComparison.Ordinal);
         Assert.Contains("Total Methods", result, StringComparison.Ordinal);
@@ -356,7 +359,7 @@ public sealed class QualityToolsTests : IDisposable
         WriteFile("src/bin/Debug/Generated.cs", "namespace TestNs; public class Gen { }");
         WriteFile("src/obj/Debug/Temp.cs", "namespace TestNs; public class Tmp { }");
 
-        var result = QualityTools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
+        var result = _tools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
 
         Assert.Contains("C# Files | 1", result, StringComparison.Ordinal);
     }
@@ -366,7 +369,7 @@ public sealed class QualityToolsTests : IDisposable
     {
         WriteFile("src/readme.txt", "no C# here");
 
-        var result = QualityTools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
+        var result = _tools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
 
         Assert.Contains("No C# files found", result, StringComparison.Ordinal);
     }
@@ -374,7 +377,7 @@ public sealed class QualityToolsTests : IDisposable
     [Fact]
     public void AnalyzeCSharpProject_PathTraversal_ReturnsError()
     {
-        var result = QualityTools.AnalyzeCSharpProject("../../../etc");
+        var result = _tools.AnalyzeCSharpProject("../../../etc");
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -395,7 +398,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("src/Documented.cs", code);
 
-        var result = QualityTools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
+        var result = _tools.AnalyzeCSharpProject(Path.Combine(_root, "src"));
 
         Assert.Contains("Comment/Code Ratio", result, StringComparison.Ordinal);
         // 3 comment lines out of ~6 code lines; ratio should be > 0
@@ -420,7 +423,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile("script.py", code);
 
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "script.py"), "python");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "script.py"), "python");
 
         Assert.Contains("[python]", result, StringComparison.Ordinal);
         Assert.Contains("Lines |", result, StringComparison.Ordinal);
@@ -436,7 +439,7 @@ public sealed class QualityToolsTests : IDisposable
         var code = $"# comment\n{longLine}\n{longLine}\nnormal line";
         WriteFile("wide.py", code);
 
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "wide.py"), "python");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "wide.py"), "python");
 
         Assert.Contains("Lines >120 chars | 2", result, StringComparison.Ordinal);
     }
@@ -448,7 +451,7 @@ public sealed class QualityToolsTests : IDisposable
         var code = "def outer():\n    if True:\n        if True:\n            if True:\n                if True:\n                    if True:\n                        if True:\n                            pass\n";
         WriteFile("nested.py", code);
 
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "nested.py"), "python");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "nested.py"), "python");
 
         Assert.Contains("Max Nesting |", result, StringComparison.Ordinal);
     }
@@ -459,7 +462,7 @@ public sealed class QualityToolsTests : IDisposable
         var code = "# helper\ndef add(a, b):\n    return a + b\n";
         WriteFile("clean.py", code);
 
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "clean.py"), "python");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "clean.py"), "python");
 
         Assert.Contains("Health Grade: A", result, StringComparison.Ordinal);
     }
@@ -467,7 +470,7 @@ public sealed class QualityToolsTests : IDisposable
     [Fact]
     public void AnalyzeSourceFile_NonexistentFile_ReturnsError()
     {
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "ghost.py"), "python");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "ghost.py"), "python");
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
         Assert.Contains("does not exist", result, StringComparison.Ordinal);
@@ -476,7 +479,7 @@ public sealed class QualityToolsTests : IDisposable
     [Fact]
     public void AnalyzeSourceFile_PathTraversal_ReturnsError()
     {
-        var result = QualityTools.AnalyzeSourceFile("../../../etc/passwd", "text");
+        var result = _tools.AnalyzeSourceFile("../../../etc/passwd", "text");
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }
@@ -492,7 +495,7 @@ public sealed class QualityToolsTests : IDisposable
         var code = $"{commentLine}\ncode line\n";
         WriteFile("commented.src", code);
 
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "commented.src"), "generic");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "commented.src"), "generic");
 
         // Comment ratio should be > 0 since we have 1 comment and 1 code line
         Assert.Contains("Comment Ratio", result, StringComparison.Ordinal);
@@ -504,7 +507,7 @@ public sealed class QualityToolsTests : IDisposable
         var code = "# TODO: fix this\n# FIXME: broken\n# HACK: workaround\n# XXX: danger\ncode()\n";
         WriteFile("todos.py", code);
 
-        var result = QualityTools.AnalyzeSourceFile(Path.Combine(_root, "todos.py"), "python");
+        var result = _tools.AnalyzeSourceFile(Path.Combine(_root, "todos.py"), "python");
 
         Assert.Contains("TODO/FIXME | 4", result, StringComparison.Ordinal);
     }
@@ -525,7 +528,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile(".editorconfig", editorconfig);
 
-        var result = QualityTools.CheckEditorConfig(_root);
+        var result = _tools.CheckEditorConfig(_root);
 
         Assert.Contains(".editorconfig", result, StringComparison.Ordinal);
         Assert.Contains("indent_style = space", result, StringComparison.Ordinal);
@@ -541,12 +544,10 @@ public sealed class QualityToolsTests : IDisposable
         var sub = Path.Combine(_root, "deep", "nested");
         Directory.CreateDirectory(sub);
 
-        // Set root to the sub so walking up stays within _root (no parent .editorconfig)
-        FileTools.RootDirectory = sub;
-        var result = QualityTools.CheckEditorConfig(sub);
-
-        // Restore root for cleanup
-        FileTools.RootDirectory = _root;
+        // Use sub as root so walking up stays within sub (no parent .editorconfig)
+        var subFileTools = new FileTools(sub);
+        var subTools = new QualityTools(subFileTools);
+        var result = subTools.CheckEditorConfig(sub);
 
         Assert.Contains("No .editorconfig found", result, StringComparison.Ordinal);
     }
@@ -560,7 +561,7 @@ public sealed class QualityToolsTests : IDisposable
         var sub = Path.Combine(_root, "src", "deep");
         Directory.CreateDirectory(sub);
 
-        var result = QualityTools.CheckEditorConfig(sub);
+        var result = _tools.CheckEditorConfig(sub);
 
         Assert.Contains("indent_size = 2", result, StringComparison.Ordinal);
     }
@@ -577,7 +578,7 @@ public sealed class QualityToolsTests : IDisposable
             """;
         WriteFile(".editorconfig", editorconfig);
 
-        var result = QualityTools.CheckEditorConfig(_root);
+        var result = _tools.CheckEditorConfig(_root);
 
         // indent_size matches "indent" filter
         Assert.Contains("indent_size = 4", result, StringComparison.Ordinal);
@@ -590,7 +591,7 @@ public sealed class QualityToolsTests : IDisposable
     [Fact]
     public void CheckEditorConfig_PathTraversal_ReturnsError()
     {
-        var result = QualityTools.CheckEditorConfig("../../../etc");
+        var result = _tools.CheckEditorConfig("../../../etc");
 
         Assert.StartsWith("Error:", result, StringComparison.Ordinal);
     }

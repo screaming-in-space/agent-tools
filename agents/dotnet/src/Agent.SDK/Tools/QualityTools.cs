@@ -10,13 +10,20 @@ namespace Agent.SDK.Tools;
 /// <summary>
 /// Code quality analysis tools. Uses Roslyn for C# files and regex heuristics for others.
 /// </summary>
-public static class QualityTools
+public class QualityTools
 {
+    private readonly FileTools _fileTools;
+
+    public QualityTools(FileTools fileTools)
+    {
+        _fileTools = fileTools;
+    }
+
     [Description("Analyzes a C# file using Roslyn. Returns per-method metrics (name, lines, complexity, params), file stats (classes, usings, namespace), and anti-patterns (.Result, .Wait(), async void, bare catch). Health grade: A=0 issues, B=1, C=2, D=3-4, F=5+. Issue triggers: >500 lines, >1000 lines, complexity>10, complexity>20, any anti-patterns, >3 anti-patterns, >20 methods.")]
-    public static string AnalyzeCSharpFile(
+    public string AnalyzeCSharpFile(
         [Description("Path to the .cs file to analyze")] string filePath)
     {
-        var resolved = FileTools.ResolveSafePath(filePath);
+        var resolved = _fileTools.ResolveSafePath(filePath);
         if (resolved is null)
         {
             return $"Error: path '{filePath}' is outside the allowed root directory.";
@@ -37,7 +44,7 @@ public static class QualityTools
 
             var tree = CSharpSyntaxTree.ParseText(content);
             var root = tree.GetCompilationUnitRoot();
-            var rel = Path.GetRelativePath(FileTools.RootDirectory, resolved).Replace('\\', '/');
+            var rel = Path.GetRelativePath(_fileTools.RootDirectory, resolved).Replace('\\', '/');
 
             var sb = new StringBuilder();
             sb.AppendLine($"## {rel}");
@@ -137,10 +144,10 @@ public static class QualityTools
     }
 
     [Description("Aggregates C# quality metrics for all .cs files in a directory. Returns total files, average method length, longest method, highest complexity, comment-to-code ratio, and anti-pattern counts.")]
-    public static string AnalyzeCSharpProject(
+    public string AnalyzeCSharpProject(
         [Description("Absolute path to the project directory")] string directoryPath)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -243,11 +250,11 @@ public static class QualityTools
     }
 
     [Description("Analyzes a non-C# source file using regex heuristics. Returns line count, comment ratio, TODO/FIXME count, magic number detection, long lines, and nesting depth.")]
-    public static string AnalyzeSourceFile(
+    public string AnalyzeSourceFile(
         [Description("Path to the source file")] string filePath,
         [Description("Language of the file (python, typescript, sql, etc.)")] string language)
     {
-        var resolved = FileTools.ResolveSafePath(filePath);
+        var resolved = _fileTools.ResolveSafePath(filePath);
         if (resolved is null)
         {
             return $"Error: path '{filePath}' is outside the allowed root directory.";
@@ -262,7 +269,7 @@ public static class QualityTools
         if (content.Length > 200_000) content = content[..200_000];
 
         var lines = content.Split('\n');
-        var rel = Path.GetRelativePath(FileTools.RootDirectory, resolved).Replace('\\', '/');
+        var rel = Path.GetRelativePath(_fileTools.RootDirectory, resolved).Replace('\\', '/');
 
         var sb = new StringBuilder();
         sb.AppendLine($"## {rel} [{language}]");
@@ -344,10 +351,10 @@ public static class QualityTools
     }
 
     [Description("Reads .editorconfig if present and returns active rules so quality checks can respect project conventions.")]
-    public static string CheckEditorConfig(
+    public string CheckEditorConfig(
         [Description("Absolute path to the directory to check")] string directoryPath)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -377,7 +384,7 @@ public static class QualityTools
         }
 
         var content = File.ReadAllText(editorConfigPath);
-        var rel = Path.GetRelativePath(FileTools.RootDirectory, editorConfigPath).Replace('\\', '/');
+        var rel = Path.GetRelativePath(_fileTools.RootDirectory, editorConfigPath).Replace('\\', '/');
 
         var sb = new StringBuilder();
         sb.AppendLine($"## .editorconfig ({rel})");

@@ -101,17 +101,23 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         CancellationToken ct)
     {
         var scanOptions = context.ScanOptions;
+        var fileTools = new FileTools(context.TargetPath, contextDir);
+        var codeCommentTools = new CodeCommentTools(fileTools);
+        var gitTools = new GitTools(fileTools);
+        var structureTools = new StructureTools(fileTools);
+        var qualityTools = new QualityTools(fileTools);
 
         if (scanOptions.ScanMarkdown)
         {
+            fileTools.ResetReadTracking();
             await runner.RunAsync(context, "Markdown Scanner",
                 SystemPrompt.Build(context.TargetPath, context.OutputPath),
                 $"Investigate the markdown files in: {context.TargetPath}",
                 [
-                    AIFunctionFactory.Create(FileTools.ListMarkdownFiles),
-                    AIFunctionFactory.Create(FileTools.ReadFileContent),
+                    AIFunctionFactory.Create(fileTools.ListMarkdownFiles),
+                    AIFunctionFactory.Create(fileTools.ReadFileContent),
                     AIFunctionFactory.Create(FileTools.ExtractStructure),
-                    AIFunctionFactory.Create(FileTools.WriteOutput),
+                    AIFunctionFactory.Create(fileTools.WriteOutput),
                 ], ct, expectedOutputPath: context.OutputPath,
                 modelOverride: modelPlan.GetValueOrDefault("markdown"),
                 timeout: TimeSpan.FromMinutes(2));
@@ -119,16 +125,17 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
 
         if (scanOptions.ScanCodeComments)
         {
+            fileTools.ResetReadTracking();
             var rulesPath = Path.Combine(contextDir, "RULES.md");
             await runner.RunAsync(context, "Rules Scanner",
                 RulesPrompt.Build(context.TargetPath, rulesPath),
                 $"Analyze code comments and patterns in: {context.TargetPath}",
                 [
-                    AIFunctionFactory.Create(CodeCommentTools.ListSourceFiles),
-                    AIFunctionFactory.Create(CodeCommentTools.ExtractComments),
-                    AIFunctionFactory.Create(CodeCommentTools.ExtractCodePatterns),
-                    AIFunctionFactory.Create(FileTools.ReadFileContent),
-                    AIFunctionFactory.Create(FileTools.WriteOutput),
+                    AIFunctionFactory.Create(codeCommentTools.ListSourceFiles),
+                    AIFunctionFactory.Create(codeCommentTools.ExtractComments),
+                    AIFunctionFactory.Create(codeCommentTools.ExtractCodePatterns),
+                    AIFunctionFactory.Create(fileTools.ReadFileContent),
+                    AIFunctionFactory.Create(fileTools.WriteOutput),
                 ], ct, expectedOutputPath: rulesPath,
                 modelOverride: modelPlan.GetValueOrDefault("rules"),
                 timeout: TimeSpan.FromMinutes(4));
@@ -136,33 +143,35 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
 
         if (scanOptions.ScanCodePattern)
         {
+            fileTools.ResetReadTracking();
             var structurePath = Path.Combine(contextDir, "STRUCTURE.md");
             await runner.RunAsync(context, "Structure Scanner",
                 StructurePrompt.Build(context.TargetPath, structurePath),
                 $"Analyze project structure in: {context.TargetPath}",
                 [
-                    AIFunctionFactory.Create(StructureTools.ListProjects),
-                    AIFunctionFactory.Create(StructureTools.ReadProjectFile),
-                    AIFunctionFactory.Create(StructureTools.MapDependencyGraph),
-                    AIFunctionFactory.Create(StructureTools.DetectArchitecturePattern),
-                    AIFunctionFactory.Create(FileTools.WriteOutput),
+                    AIFunctionFactory.Create(structureTools.ListProjects),
+                    AIFunctionFactory.Create(structureTools.ReadProjectFile),
+                    AIFunctionFactory.Create(structureTools.MapDependencyGraph),
+                    AIFunctionFactory.Create(structureTools.DetectArchitecturePattern),
+                    AIFunctionFactory.Create(fileTools.WriteOutput),
                 ], ct, expectedOutputPath: structurePath,
                 modelOverride: modelPlan.GetValueOrDefault("structure"),
                 timeout: TimeSpan.FromMinutes(3));
 
+            fileTools.ResetReadTracking();
             var qualityPath = Path.Combine(contextDir, "QUALITY.md");
             await runner.RunAsync(context, "Quality Scanner",
                 QualityPrompt.Build(context.TargetPath, qualityPath),
                 $"Analyze code quality in: {context.TargetPath}",
                 [
-                    AIFunctionFactory.Create(QualityTools.AnalyzeCSharpFile),
-                    AIFunctionFactory.Create(QualityTools.AnalyzeCSharpProject),
-                    AIFunctionFactory.Create(QualityTools.AnalyzeSourceFile),
-                    AIFunctionFactory.Create(QualityTools.CheckEditorConfig),
-                    AIFunctionFactory.Create(StructureTools.ListProjects),
-                    AIFunctionFactory.Create(CodeCommentTools.ListSourceFiles),
-                    AIFunctionFactory.Create(FileTools.ReadFileContent),
-                    AIFunctionFactory.Create(FileTools.WriteOutput),
+                    AIFunctionFactory.Create(qualityTools.AnalyzeCSharpFile),
+                    AIFunctionFactory.Create(qualityTools.AnalyzeCSharpProject),
+                    AIFunctionFactory.Create(qualityTools.AnalyzeSourceFile),
+                    AIFunctionFactory.Create(qualityTools.CheckEditorConfig),
+                    AIFunctionFactory.Create(structureTools.ListProjects),
+                    AIFunctionFactory.Create(codeCommentTools.ListSourceFiles),
+                    AIFunctionFactory.Create(fileTools.ReadFileContent),
+                    AIFunctionFactory.Create(fileTools.WriteOutput),
                 ], ct, expectedOutputPath: qualityPath,
                 modelOverride: modelPlan.GetValueOrDefault("quality"),
                 timeout: TimeSpan.FromMinutes(4));
@@ -170,32 +179,34 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
 
         if (scanOptions.ScanGitHistory)
         {
+            fileTools.ResetReadTracking();
             var journalPath = Path.Combine(contextDir, "JOURNAL.md");
             await runner.RunAsync(context, "Journal Scanner",
                 JournalPrompt.Build(context.TargetPath, Path.Combine(contextDir, "journal")),
                 $"Analyze git history in: {context.TargetPath}",
                 [
-                    AIFunctionFactory.Create(GitTools.GetGitLog),
-                    AIFunctionFactory.Create(GitTools.GetGitDiff),
-                    AIFunctionFactory.Create(GitTools.GetGitStats),
-                    AIFunctionFactory.Create(GitTools.CheckJournalExists),
-                    AIFunctionFactory.Create(FileTools.WriteOutput),
+                    AIFunctionFactory.Create(gitTools.GetGitLog),
+                    AIFunctionFactory.Create(gitTools.GetGitDiff),
+                    AIFunctionFactory.Create(gitTools.GetGitStats),
+                    AIFunctionFactory.Create(gitTools.CheckJournalExists),
+                    AIFunctionFactory.Create(fileTools.WriteOutput),
                 ], ct, expectedOutputPath: journalPath,
                 modelOverride: modelPlan.GetValueOrDefault("journal"),
                 timeout: TimeSpan.FromMinutes(3));
         }
 
         // DONE.md always runs last — aggregates all prior scanner results
+        fileTools.ResetReadTracking();
         var donePath = Path.Combine(contextDir, "DONE.md");
         await runner.RunAsync(context, "Done Scanner",
             DonePrompt.Build(context.TargetPath, donePath),
             $"Produce a completion checklist for: {context.TargetPath}",
             [
-                AIFunctionFactory.Create(StructureTools.ListProjects),
-                AIFunctionFactory.Create(CodeCommentTools.ListSourceFiles),
-                AIFunctionFactory.Create(FileTools.ListMarkdownFiles),
-                AIFunctionFactory.Create(FileTools.ReadFileContent),
-                AIFunctionFactory.Create(FileTools.WriteOutput),
+                AIFunctionFactory.Create(structureTools.ListProjects),
+                AIFunctionFactory.Create(codeCommentTools.ListSourceFiles),
+                AIFunctionFactory.Create(fileTools.ListMarkdownFiles),
+                AIFunctionFactory.Create(fileTools.ReadFileContent),
+                AIFunctionFactory.Create(fileTools.WriteOutput),
             ], ct, expectedOutputPath: donePath,
             modelOverride: modelPlan.GetValueOrDefault("done"),
             timeout: TimeSpan.FromMinutes(3));
@@ -275,9 +286,6 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         }
 
         // ── Set root directory for file tools ───────────────────────────
-
-        FileTools.RootDirectory = targetPath;
-        FileTools.ExcludeDirectory = contextDir;
 
         var ctx = new AgentContext(targetPath, repoRoot, outputPath, modelOptions, [], scanOptions);
         return (0, ctx, health.LoadedModels);

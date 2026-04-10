@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -9,13 +10,20 @@ namespace Agent.SDK.Tools;
 /// Tools for analyzing .NET project structure: .csproj/.fsproj/.sln/.slnx parsing,
 /// dependency graphs, and architecture pattern detection.
 /// </summary>
-public static class StructureTools
+public class StructureTools
 {
+    private readonly FileTools _fileTools;
+
+    public StructureTools(FileTools fileTools)
+    {
+        _fileTools = fileTools;
+    }
+
     [Description("Finds all .csproj, .fsproj, .sln, and .slnx files in a directory. For each project returns: name, output type, target framework, project references, and package references.")]
-    public static string ListProjects(
+    public string ListProjects(
         [Description("Absolute path to the directory to scan")] string directoryPath)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -31,6 +39,7 @@ public static class StructureTools
         // Find solution files
         var slnFiles = Directory.EnumerateFiles(resolved, "*.sln", SearchOption.AllDirectories)
             .Concat(Directory.EnumerateFiles(resolved, "*.slnx", SearchOption.AllDirectories))
+            .Where(f => !_fileTools.IsExcluded(f))
             .ToList();
 
         if (slnFiles.Count > 0)
@@ -38,7 +47,7 @@ public static class StructureTools
             sb.AppendLine("## Solutions");
             foreach (var sln in slnFiles)
             {
-                sb.AppendLine($"- {Path.GetRelativePath(FileTools.RootDirectory, sln).Replace('\\', '/')}");
+                sb.AppendLine($"- {Path.GetRelativePath(_fileTools.RootDirectory, sln).Replace('\\', '/')}");
             }
             sb.AppendLine();
         }
@@ -46,6 +55,7 @@ public static class StructureTools
         // Find project files
         var projFiles = Directory.EnumerateFiles(resolved, "*.csproj", SearchOption.AllDirectories)
             .Concat(Directory.EnumerateFiles(resolved, "*.fsproj", SearchOption.AllDirectories))
+            .Where(f => !_fileTools.IsExcluded(f))
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -62,7 +72,7 @@ public static class StructureTools
         foreach (var proj in projFiles)
         {
             var info = ParseProjectFile(proj);
-            var relPath = Path.GetRelativePath(FileTools.RootDirectory, proj).Replace('\\', '/');
+            var relPath = Path.GetRelativePath(_fileTools.RootDirectory, proj).Replace('\\', '/');
             var name = Path.GetFileNameWithoutExtension(proj);
             sb.AppendLine($"| {name} | {info.OutputType} | {info.TargetFramework} | {info.ProjectRefCount} | {info.PackageRefCount} |");
         }
@@ -71,10 +81,10 @@ public static class StructureTools
     }
 
     [Description("Parses a .csproj or .fsproj XML file and returns structured info: output type, target framework, project references, package references, and key properties.")]
-    public static string ReadProjectFile(
+    public string ReadProjectFile(
         [Description("Path to the .csproj or .fsproj file")] string filePath)
     {
-        var resolved = FileTools.ResolveSafePath(filePath);
+        var resolved = _fileTools.ResolveSafePath(filePath);
         if (resolved is null)
         {
             return $"Error: path '{filePath}' is outside the allowed root directory.";
@@ -165,10 +175,10 @@ public static class StructureTools
     }
 
     [Description("Builds a dependency graph from project references in a directory. Returns a text-based graph showing which projects depend on which.")]
-    public static string MapDependencyGraph(
+    public string MapDependencyGraph(
         [Description("Absolute path to the directory to scan")] string directoryPath)
     {
-        var resolved = FileTools.ResolveSafePath(directoryPath);
+        var resolved = _fileTools.ResolveSafePath(directoryPath);
         if (resolved is null)
         {
             return $"Error: path '{directoryPath}' is outside the allowed root directory.";
@@ -236,7 +246,8 @@ public static class StructureTools
     }
 
     [Description("Given a list of project names and their dependencies, classifies the architecture pattern (N-Tier, Hexagonal, Vertical Slice, Monolith, Microservices, etc.) based on naming conventions and dependency direction. Pass the output from ListProjects and MapDependencyGraph.")]
-    public static string DetectArchitecturePattern(
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Instance method required for AIFunctionFactory.Create")]
+    public string DetectArchitecturePattern(
         [Description("The output from ListProjects (project names, types, references)")] string projectList = "",
         [Description("The output from MapDependencyGraph (dependency tree)")] string dependencyGraph = "")
     {

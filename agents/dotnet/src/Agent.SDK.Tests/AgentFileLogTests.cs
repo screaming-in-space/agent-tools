@@ -77,8 +77,8 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
     public async Task DebugLog_Initialize_CreatesFile()
     {
         await AgentDebugLog.InitAsync(_dir);
-        AgentDebugLog.Write("[TEST] hello");
-        AgentDebugLog.Flush();
+        await AgentDebugLog.WriteAsync("[TEST] hello");
+        await AgentDebugLog.FlushAsync();
         await AgentDebugLog.CloseAsync();
 
         var logPath = Path.Combine(_dir, "agent_streaming_debug.log");
@@ -92,11 +92,11 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
     public async Task DebugLog_WriteDirect_BuffersUntilFlush()
     {
         await AgentDebugLog.InitAsync(_dir);
-        AgentDebugLog.Write("buffered");
+        await AgentDebugLog.WriteAsync("buffered");
 
         var logPath = Path.Combine(_dir, "agent_streaming_debug.log");
         // Content may not be on disk yet (AutoFlush = false)
-        AgentDebugLog.Flush();
+        await AgentDebugLog.FlushAsync();
         await AgentDebugLog.CloseAsync();
 
         var content = await File.ReadAllTextAsync(logPath);
