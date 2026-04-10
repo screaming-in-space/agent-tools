@@ -1,12 +1,12 @@
 # ModelBoss
 
-Benchmark local LLM models with deterministic speed, accuracy, and quality scoring. No LLM-as-judge — all scoring uses substring matching, structure validation, and bigram similarity.
+Benchmark local LLM models with deterministic speed, accuracy, and quality scoring. Combines substring matching, structure validation, and bigram similarity with optional LLM-as-judge evaluation for nuanced quality assessment.
 
 ## Quick start
 
 ```bash
-cd agents/dotnet
-dotnet run --project src/ModelBoss -- --headless
+# From the repo root (agent-tools/)
+dotnet run --project agents/dotnet/src/ModelBoss -- --headless
 ```
 
 Requires:
@@ -36,22 +36,36 @@ Requires:
 
 ## Examples
 
-Benchmark only the default model:
+All commands run from the **repo root** (`agent-tools/`).
+
+Benchmark all configured models with the interactive Spectre UI:
 
 ```bash
-dotnet run --project src/ModelBoss -- --models default --headless
+dotnet run --project agents/dotnet/src/ModelBoss
+```
+
+Benchmark only the default model in headless mode:
+
+```bash
+dotnet run --project agents/dotnet/src/ModelBoss -- --models default --headless
 ```
 
 Run just the reasoning suite with 5 iterations:
 
 ```bash
-dotnet run --project src/ModelBoss -- --category reasoning --iterations 5 --headless
+dotnet run --project agents/dotnet/src/ModelBoss -- --category reasoning --iterations 5
 ```
 
 Benchmark two specific models and write results to a custom directory:
 
 ```bash
-dotnet run --project src/ModelBoss -- --models default,gemma-26b --output ./results --headless
+dotnet run --project agents/dotnet/src/ModelBoss -- --models default,gemma-26b --output ./results --headless
+```
+
+Run only instruction-following benchmarks against a single model:
+
+```bash
+dotnet run --project agents/dotnet/src/ModelBoss -- --models qwen --category instruction_following
 ```
 
 ## Configuration
@@ -88,8 +102,16 @@ Writes `BENCHMARK.md` to the output directory with:
 
 ### Composite score formula
 
+Without LLM-as-judge:
+
 ```
 composite = (accuracy × 0.6) + (normalized_speed × 0.3) + (pass_rate × 0.1)
+```
+
+With LLM-as-judge (best model judges all others):
+
+```
+composite = (accuracy × 0.35) + (judge × 0.30) + (normalized_speed × 0.25) + (pass_rate × 0.10)
 ```
 
 Speed normalization: 50 tok/s = 1.0 (linear, capped at 1.0).
@@ -140,8 +162,8 @@ ModelBoss/
 ## Testing
 
 ```bash
-cd agents/dotnet
+# From the repo root
 dotnet test --filter "Project=ModelBoss.Tests"
 ```
 
-36 tests covering `AccuracyScorer`, `ScorecardBuilder`, and `BenchmarkSuites`.
+Tests covering `AccuracyScorer`, `ScorecardBuilder`, `BenchmarkSuites`, and `LlmJudge`.
