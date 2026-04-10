@@ -24,6 +24,7 @@ agent-tools/
 │   ├── RULES.md                           # Technical constraints, agent patterns, rejected patterns
 │   └── STRUCTURE.md                       # This file
 ├── AGENTS.md                            # Thin shim → context/RULES.md, context/STRUCTURE.md
+├── AgentTools.slnx                      # Solution manifest (all projects)
 ├── README.md                            # Skills installation, agent overview
 └── agents/dotnet/                       # .NET agent workspace (see below)
 ```
@@ -134,7 +135,6 @@ agents/dotnet/
 ├── .github/
 │   └── copilot-instructions.md         # Thin shim (workspace-scoped)
 ├── .editorconfig                       # Code style + analyzer severity overrides
-├── AgentTools.slnx                     # Solution manifest
 ├── global.json                         # SDK pin
 ├── nuget.config                        # Package source mapping
 └── README.md                           # Quick start, conventions, adding new agents
