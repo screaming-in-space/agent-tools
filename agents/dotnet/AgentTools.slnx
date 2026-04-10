@@ -12,6 +12,10 @@
   <Folder Name="/Solution Items/.github/">
     <File Path="../../.github/copilot-instructions.md" />
   </Folder>
+  <Folder Name="/Solution Items/context/" />
+  <Folder Name="/Solution Items/context/models/">
+    <File Path="../../context/models/nvidia-nemotron-3-nano-4b.md" />
+  </Folder>
   <Folder Name="/Solution Items/docs/">
     <File Path="../../docs/RULES.md" />
     <File Path="../../docs/STRUCTURE.md" />

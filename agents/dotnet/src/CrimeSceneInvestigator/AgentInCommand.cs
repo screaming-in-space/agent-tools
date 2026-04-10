@@ -524,18 +524,26 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             return (1, null, []);
         }
 
+        // ── Validate git repo ───────────────────────────────────────────
+        var repoRoot = FileTools.FindRepoRoot(targetPath);
+        if (repoRoot is null)
+        {
+            Logger.LogError("Directory '{TargetPath}' is not inside a git repository. CSI requires a .git root", targetPath);
+            return (1, null, []);
+        }
+
         var configKey = parseResult.GetValue(AgentCommandSetup.ConfigKeyOption);
         var modelOverride = parseResult.GetValue(AgentCommandSetup.ModelOverrideOption);
         var modelOptions = AgentModelOptions.Resolve(Configuration, configKey);
 
-        // --model overrides the model name from config, keeping the same endpoint/key
         if (!string.IsNullOrWhiteSpace(modelOverride))
         {
             modelOptions = modelOptions with { Model = modelOverride };
         }
 
+        var contextDir = Path.Combine(targetPath, "context");
         var outputPath = parseResult.GetValue(AgentCommandSetup.OutputOption)
-            ?? Path.Combine(targetPath, "context", "MAP.md");
+            ?? Path.Combine(contextDir, "MAP.md");
 
         // ── Resolve scan options ────────────────────────────────────────
         var scanOverride = parseResult.GetValue(AgentCommandSetup.ScanOption);
@@ -572,8 +580,9 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         // ── Set root directory for file tools ───────────────────────────
 
         FileTools.RootDirectory = targetPath;
+        FileTools.ExcludeDirectory = contextDir;
 
-        var ctx = new AgentContext(targetPath, outputPath, modelOptions, [], scanOptions);
+        var ctx = new AgentContext(targetPath, repoRoot, outputPath, modelOptions, [], scanOptions);
         return (0, ctx, health.LoadedModels);
     }
 

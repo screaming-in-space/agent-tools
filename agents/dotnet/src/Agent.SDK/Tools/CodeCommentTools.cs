@@ -74,11 +74,15 @@ public static class CodeCommentTools
         }
 
         var files = Directory.EnumerateFiles(resolved, "*.*", SearchOption.AllDirectories)
+            .Where(f => !FileTools.IsExcluded(f))
             .Where(f =>
             {
                 var ext = Path.GetExtension(f);
                 if (filterExts is not null)
+                {
                     return filterExts.Contains(ext);
+                }
+
                 return SourceExtensions.Contains(ext);
             })
             .Select(f =>
@@ -228,7 +232,9 @@ public static class CodeCommentTools
             return $"Error: directory '{resolved}' does not exist.";
         }
 
-        var csFiles = Directory.EnumerateFiles(resolved, "*.cs", SearchOption.AllDirectories).ToList();
+        var csFiles = Directory.EnumerateFiles(resolved, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !FileTools.IsExcluded(f))
+            .ToList();
         if (csFiles.Count == 0)
         {
             return "No C# files found for pattern analysis.";

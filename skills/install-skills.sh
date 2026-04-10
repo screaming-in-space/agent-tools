@@ -16,10 +16,10 @@ fi
 # Sparse checkout just the skills directory
 git clone --depth 1 --filter=blob:none --sparse "$REPO" "$TMPDIR" 2>/dev/null
 cd "$TMPDIR"
-git sparse-checkout set .claude/skills 2>/dev/null
+git sparse-checkout set skills 2>/dev/null
 
-# Copy each skill into the destination
-for skill_dir in .claude/skills/*/; do
+# Copy each skill into the destination (skip install script and README)
+for skill_dir in skills/*/; do
   skill=$(basename "$skill_dir")
   mkdir -p "$DEST/$skill"
   cp -R "$skill_dir"* "$DEST/$skill/"

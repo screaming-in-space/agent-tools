@@ -11,12 +11,19 @@ namespace CrimeSceneInvestigator;
 
 public sealed record AgentContext(
     string TargetPath,
+    string RepoRoot,
     string OutputPath,
     AgentModelOptions ModelOptions,
     IList<AITool> Tools,
     AgentScanOptions ScanOptions) : IDisposable
 {
     private readonly ILoggerFactory _loggerFactory = AgentLogging.CreateLoggerFactory();
+
+    /// <summary>
+    /// Path to model capability profiles: <c>{RepoRoot}/context/models/</c>.
+    /// The planner reads these to evaluate model suitability per scanner.
+    /// </summary>
+    public string ModelProfilesPath => Path.Combine(RepoRoot, "context", "models");
 
     /// <summary>
     /// Builds a chat client pipeline. Uses <paramref name="overrideOptions"/> when provided,

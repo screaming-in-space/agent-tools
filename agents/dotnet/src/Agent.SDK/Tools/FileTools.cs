@@ -24,6 +24,32 @@ public static class FileTools
     /// <summary>Root directory the agent is allowed to operate within.</summary>
     public static string RootDirectory { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Directory to exclude from listing operations (e.g., the scanner output directory).
+    /// Prevents scanners from reading their own stale output as input.
+    /// </summary>
+    public static string ExcludeDirectory { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Walks up from <paramref name="startPath"/> to find the nearest directory
+    /// containing a <c>.git</c> folder. Returns <c>null</c> if no repo root is found.
+    /// </summary>
+    public static string? FindRepoRoot(string startPath)
+    {
+        var dir = new DirectoryInfo(startPath);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
+
     [Description("Lists all markdown (.md) files in the specified directory, recursively. Returns one relative path per line.")]
     public static string ListMarkdownFiles(
         [Description("Absolute path to the directory to scan")] string directoryPath)
@@ -40,6 +66,7 @@ public static class FileTools
         }
 
         var files = Directory.EnumerateFiles(resolved, "*.md", SearchOption.AllDirectories)
+            .Where(f => !IsExcluded(f))
             .Select(f => Path.GetRelativePath(RootDirectory, f).Replace('\\', '/'))
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -175,6 +202,22 @@ public static class FileTools
     /// Resolves a path (absolute or relative) and validates it falls within <see cref="RootDirectory"/>.
     /// Returns the full resolved path, or <c>null</c> if the path escapes the root.
     /// </summary>
+    /// <summary>
+    /// Returns <c>true</c> if the file falls within <see cref="ExcludeDirectory"/>.
+    /// Used by listing tools to skip scanner output files from previous runs.
+    /// </summary>
+    public static bool IsExcluded(string absolutePath)
+    {
+        if (string.IsNullOrEmpty(ExcludeDirectory))
+        {
+            return false;
+        }
+
+        var excludeFull = Path.GetFullPath(ExcludeDirectory);
+        var fileFull = Path.GetFullPath(absolutePath);
+        return fileFull.StartsWith(excludeFull, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string? ResolveSafePath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
