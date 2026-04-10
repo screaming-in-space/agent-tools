@@ -30,6 +30,10 @@ public interface IAgentOutput : IDisposable
     Task ToolStartedAsync(string toolName, string? detail = null);
     Task ToolCompletedAsync(string toolName, TimeSpan elapsed, string? detail = null, bool success = true);
     Task AppendThinkingAsync(string token);
+
+    /// <summary>Reports a per-prompt benchmark metric (tok/s and accuracy) for the active scanner.</summary>
+    Task ReportPromptResultAsync(string promptName, double tokensPerSecond, double accuracyScore);
+
     Task StopAsync(AgentRunSummary summary, CancellationToken ct = default);
     Task WriteResponseAsync(string text);
 }

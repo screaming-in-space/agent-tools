@@ -202,6 +202,86 @@ public class ScorecardBuilderTests
         Assert.Equal("dense", scorecard.RegistryInfo.Architecture);
     }
 
+    [Fact]
+    public void Build_WithThinkingTokens_PopulatesThinkingMetrics()
+    {
+        var result = MakeThinkingResult(
+            "prompt_a", outputTokens: 50, thinkingTokens: 200,
+            durationSec: 10.0, thinkingDurationSec: 8.0);
+
+        var benchmarks = new Dictionary<string, IReadOnlyList<BenchmarkResult>>
+        {
+            ["prompt_a"] = [result],
+        };
+        var accuracy = MakeAccuracyResult("prompt_a", score: 0.9, passed: true);
+
+        var scorecard = ScorecardBuilder.Build(
+            "default", DefaultModelOptions, benchmarks, accuracy, registryInfo: null);
+
+        Assert.True(scorecard.UsesThinking);
+        Assert.Equal(200, scorecard.TotalThinkingTokens);
+        Assert.Equal(TimeSpan.FromSeconds(8.0), scorecard.MedianThinkingDuration);
+    }
+
+    [Fact]
+    public void Build_WithThinkingTokens_SeparatesGenerationRate()
+    {
+        // 10s total, 8s thinking → 2s generation time, 50 output tokens → 25 gen tok/s
+        var result = MakeThinkingResult(
+            "prompt_a", outputTokens: 50, thinkingTokens: 200,
+            durationSec: 10.0, thinkingDurationSec: 8.0);
+
+        var benchmarks = new Dictionary<string, IReadOnlyList<BenchmarkResult>>
+        {
+            ["prompt_a"] = [result],
+        };
+        var accuracy = MakeAccuracyResult("prompt_a", score: 0.9, passed: true);
+
+        var scorecard = ScorecardBuilder.Build(
+            "default", DefaultModelOptions, benchmarks, accuracy, registryInfo: null);
+
+        // Overall: 50 / 10 = 5.0 tok/s
+        Assert.Equal(5.0, scorecard.MedianTokensPerSecond, precision: 1);
+        // Generation only: 50 / 2 = 25.0 tok/s
+        Assert.Equal(25.0, scorecard.MedianGenerationTokensPerSecond, precision: 1);
+    }
+
+    [Fact]
+    public void Build_WithoutThinkingTokens_UsesThinkingIsFalse()
+    {
+        var benchmarks = MakeBenchmarkResults("prompt_a", tokensPerSecond: 25.0, durationSec: 2.0);
+        var accuracy = MakeAccuracyResult("prompt_a", score: 0.8, passed: true);
+
+        var scorecard = ScorecardBuilder.Build(
+            "default", DefaultModelOptions, benchmarks, accuracy, registryInfo: null);
+
+        Assert.False(scorecard.UsesThinking);
+        Assert.Equal(0, scorecard.TotalThinkingTokens);
+        Assert.Equal(TimeSpan.Zero, scorecard.MedianThinkingDuration);
+    }
+
+    [Fact]
+    public void BenchmarkResult_GenerationTokensPerSecond_ExcludesThinkingTime()
+    {
+        // 5s total, 3s thinking → 2s generation, 40 output tokens → 20 gen tok/s
+        var result = MakeThinkingResult(
+            "prompt_a", outputTokens: 40, thinkingTokens: 100,
+            durationSec: 5.0, thinkingDurationSec: 3.0);
+
+        Assert.Equal(20.0, result.GenerationTokensPerSecond, precision: 1);
+        // Total tok/s: 40 / 5 = 8.0
+        Assert.Equal(8.0, result.TokensPerSecond, precision: 1);
+    }
+
+    [Fact]
+    public void BenchmarkResult_GenerationTokensPerSecond_NoThinking_EqualsTokensPerSecond()
+    {
+        var result = MakeSingleResult("prompt_a", tokensPerSecond: 30.0, durationSec: 2.0);
+
+        // No thinking → generation time == total time → rates should match
+        Assert.Equal(result.TokensPerSecond, result.GenerationTokensPerSecond, precision: 1);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static BenchmarkResult MakeSingleResult(
@@ -245,6 +325,29 @@ public class ScorecardBuilderTests
                 Passed = passed,
                 Checks = [],
             },
+        };
+    }
+
+    private static BenchmarkResult MakeThinkingResult(
+        string promptName, int outputTokens, int thinkingTokens,
+        double durationSec, double thinkingDurationSec)
+    {
+        var duration = TimeSpan.FromSeconds(durationSec);
+        var thinkingDuration = TimeSpan.FromSeconds(thinkingDurationSec);
+
+        return new BenchmarkResult
+        {
+            ModelId = "test-model",
+            PromptName = promptName,
+            TotalDuration = duration,
+            TimeToFirstToken = TimeSpan.FromMilliseconds(150) + thinkingDuration,
+            TimeToFirstThinking = TimeSpan.FromMilliseconds(150),
+            ThinkingDuration = thinkingDuration,
+            OutputTokens = outputTokens,
+            ThinkingTokens = thinkingTokens,
+            InputTokens = 50,
+            RawOutput = new string('x', outputTokens * 4),
+            Success = true,
         };
     }
 }

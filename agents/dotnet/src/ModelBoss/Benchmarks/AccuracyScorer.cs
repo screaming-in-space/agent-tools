@@ -9,6 +9,7 @@ public static class AccuracyScorer
 {
     /// <summary>
     /// Scores a model's raw output against the expected output definition.
+    /// For multi-turn prompts, scores each turn independently and averages results.
     /// Returns an <see cref="AccuracyResult"/> with individual check breakdowns.
     /// </summary>
     public static AccuracyResult Score(string modelId, BenchmarkPrompt prompt, string rawOutput)
@@ -16,7 +17,17 @@ public static class AccuracyScorer
         ArgumentNullException.ThrowIfNull(prompt);
         rawOutput ??= "";
 
-        var expected = prompt.Expected;
+        if (prompt.IsMultiTurn)
+        {
+            return ScoreMultiTurn(modelId, prompt, rawOutput);
+        }
+
+        return ScoreSingleTurn(modelId, prompt.Name, rawOutput, prompt.Expected);
+    }
+
+    private static AccuracyResult ScoreSingleTurn(
+        string modelId, string promptName, string rawOutput, ExpectedOutput expected)
+    {
         var checks = new List<AccuracyCheck>();
 
         // ── Length check ───────────────────────────────────────────────
@@ -32,6 +43,12 @@ public static class AccuracyScorer
         if (expected.ForbiddenSubstrings.Count > 0)
         {
             checks.Add(ScoreForbiddenSubstrings(rawOutput, expected.ForbiddenSubstrings));
+        }
+
+        // ── Preamble check ─────────────────────────────────────────────
+        if (expected.ForbiddenPreamble.Count > 0)
+        {
+            checks.Add(ScoreForbiddenPreamble(rawOutput, expected.ForbiddenPreamble));
         }
 
         // ── Required structure ─────────────────────────────────────────
@@ -61,11 +78,99 @@ public static class AccuracyScorer
         return new AccuracyResult
         {
             ModelId = modelId,
-            PromptName = prompt.Name,
+            PromptName = promptName,
             Score = compositeScore,
             Passed = compositeScore >= expected.PassThreshold,
             Checks = checks,
         };
+    }
+
+    /// <summary>
+    /// Scores a multi-turn conversation by splitting on turn markers and scoring each turn
+    /// against its corresponding <see cref="ConversationTurn.Expected"/>. Final score is the
+    /// weighted average across all turns, with later turns weighted slightly higher (they test
+    /// harder capabilities like coherence and context retention).
+    /// </summary>
+    private static AccuracyResult ScoreMultiTurn(string modelId, BenchmarkPrompt prompt, string rawOutput)
+    {
+        var turnOutputs = SplitTurnOutputs(rawOutput, prompt.Turns.Count);
+        var allChecks = new List<AccuracyCheck>();
+        var turnScores = new List<double>();
+
+        for (var i = 0; i < prompt.Turns.Count; i++)
+        {
+            var turnOutput = i < turnOutputs.Count ? turnOutputs[i] : "";
+            var turnResult = ScoreSingleTurn(modelId, $"{prompt.Name}_turn{i + 1}", turnOutput, prompt.Turns[i].Expected);
+
+            // Prefix turn checks with turn number for debugging
+            foreach (var check in turnResult.Checks)
+            {
+                allChecks.Add(check with { Name = $"turn{i + 1}_{check.Name}" });
+            }
+
+            turnScores.Add(turnResult.Score);
+        }
+
+        // Weight later turns higher: turn 1 = 1.0, turn 2 = 1.5, turn 3 = 2.0, etc.
+        var totalWeight = 0.0;
+        var weightedSum = 0.0;
+
+        for (var i = 0; i < turnScores.Count; i++)
+        {
+            var weight = 1.0 + (i * 0.5);
+            weightedSum += turnScores[i] * weight;
+            totalWeight += weight;
+        }
+
+        var compositeScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
+
+        // Use the highest pass threshold from any turn
+        var passThreshold = prompt.Turns.Max(t => t.Expected.PassThreshold);
+
+        return new AccuracyResult
+        {
+            ModelId = modelId,
+            PromptName = prompt.Name,
+            Score = compositeScore,
+            Passed = compositeScore >= passThreshold,
+            Checks = allChecks,
+        };
+    }
+
+    /// <summary>
+    /// Splits concatenated multi-turn output into per-turn strings using the
+    /// <c>---TURN_N---</c> markers inserted by <see cref="BenchmarkRunner"/>.
+    /// </summary>
+    private static List<string> SplitTurnOutputs(string rawOutput, int expectedTurns)
+    {
+        if (expectedTurns <= 1)
+        {
+            return [rawOutput];
+        }
+
+        var parts = new List<string>();
+        var remaining = rawOutput;
+
+        for (var i = 2; i <= expectedTurns; i++)
+        {
+            var marker = $"\n---TURN_{i}---\n";
+            var idx = remaining.IndexOf(marker, StringComparison.Ordinal);
+
+            if (idx >= 0)
+            {
+                parts.Add(remaining[..idx]);
+                remaining = remaining[(idx + marker.Length)..];
+            }
+            else
+            {
+                // Marker missing — model may have failed partway through
+                parts.Add(remaining);
+                remaining = "";
+            }
+        }
+
+        parts.Add(remaining);
+        return parts;
     }
 
     // ── Individual checks ──────────────────────────────────────────────
@@ -159,6 +264,33 @@ public static class AccuracyScorer
             Name = "forbidden_substrings",
             Score = score,
             Weight = 1.5,
+            Detail = detail,
+        };
+    }
+
+    private static AccuracyCheck ScoreForbiddenPreamble(string output, IReadOnlyList<string> forbidden)
+    {
+        var preamble = output.Length > 100 ? output[..100] : output;
+        var violations = new List<string>();
+
+        foreach (var pattern in forbidden)
+        {
+            if (preamble.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                violations.Add(pattern);
+            }
+        }
+
+        var score = violations.Count == 0 ? 1.0 : 0.0;
+        var detail = violations.Count == 0
+            ? "No preamble filler detected"
+            : $"Preamble contains filler: {string.Join(", ", violations)}";
+
+        return new AccuracyCheck
+        {
+            Name = "preamble",
+            Score = score,
+            Weight = 2.0,
             Detail = detail,
         };
     }

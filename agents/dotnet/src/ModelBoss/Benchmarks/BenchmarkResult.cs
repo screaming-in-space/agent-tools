@@ -15,21 +15,43 @@ public sealed record BenchmarkResult
     /// <summary>Wall-clock duration from request sent to full response received.</summary>
     public required TimeSpan TotalDuration { get; init; }
 
-    /// <summary>Time from request sent to first token received (time-to-first-token).</summary>
+    /// <summary>Time from request sent to first visible token received.</summary>
     public required TimeSpan TimeToFirstToken { get; init; }
 
-    /// <summary>Total tokens generated in the response.</summary>
+    /// <summary>Time from request sent to first thinking token. Equal to <see cref="TotalDuration"/> when no thinking occurred.</summary>
+    public TimeSpan TimeToFirstThinking { get; init; }
+
+    /// <summary>Total visible output tokens generated in the response.</summary>
     public required int OutputTokens { get; init; }
+
+    /// <summary>Total thinking tokens generated before/during the response.</summary>
+    public int ThinkingTokens { get; init; }
 
     /// <summary>Total tokens consumed from the prompt.</summary>
     public required int InputTokens { get; init; }
 
-    /// <summary>Tokens per second for the generation phase (output tokens / generation time).</summary>
+    /// <summary>Visible output tokens per second (output tokens / total duration).</summary>
     public double TokensPerSecond => TotalDuration.TotalSeconds > 0
         ? OutputTokens / TotalDuration.TotalSeconds
         : 0;
 
-    /// <summary>The raw text response from the model.</summary>
+    /// <summary>
+    /// Generation tokens per second — visible output tokens divided by time spent generating
+    /// (total duration minus thinking time). Reflects actual decode speed excluding thinking overhead.
+    /// </summary>
+    public double GenerationTokensPerSecond
+    {
+        get
+        {
+            var genTime = TotalDuration - ThinkingDuration;
+            return genTime.TotalSeconds > 0 ? OutputTokens / genTime.TotalSeconds : 0;
+        }
+    }
+
+    /// <summary>Wall-clock time spent in the thinking phase. Zero when model does not think.</summary>
+    public TimeSpan ThinkingDuration { get; init; }
+
+    /// <summary>The raw text response from the model (visible output only, excludes thinking).</summary>
     public required string RawOutput { get; init; }
 
     /// <summary>Whether the request completed without error.</summary>

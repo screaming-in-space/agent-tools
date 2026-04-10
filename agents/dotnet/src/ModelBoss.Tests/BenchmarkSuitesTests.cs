@@ -14,6 +14,8 @@ public class BenchmarkSuitesTests
         Assert.Contains(all, p => p.Category == "extraction");
         Assert.Contains(all, p => p.Category == "markdown_generation");
         Assert.Contains(all, p => p.Category == "reasoning");
+        Assert.Contains(all, p => p.Category == "multi_turn");
+        Assert.Contains(all, p => p.Category == "context_window");
     }
 
     [Fact]
@@ -23,7 +25,9 @@ public class BenchmarkSuitesTests
         var sumOfParts = BenchmarkSuites.InstructionFollowing().Count
             + BenchmarkSuites.Extraction().Count
             + BenchmarkSuites.MarkdownGeneration().Count
-            + BenchmarkSuites.Reasoning().Count;
+            + BenchmarkSuites.Reasoning().Count
+            + BenchmarkSuites.MultiTurn().Count
+            + BenchmarkSuites.ContextWindow().Count;
 
         Assert.Equal(sumOfParts, all.Count);
     }
@@ -33,6 +37,8 @@ public class BenchmarkSuitesTests
     [InlineData("extraction")]
     [InlineData("markdown_generation")]
     [InlineData("reasoning")]
+    [InlineData("multi_turn")]
+    [InlineData("context_window")]
     public void Category_AllPromptsHaveMatchingCategory(string category)
     {
         var prompts = category switch
@@ -41,6 +47,8 @@ public class BenchmarkSuitesTests
             "extraction" => BenchmarkSuites.Extraction(),
             "markdown_generation" => BenchmarkSuites.MarkdownGeneration(),
             "reasoning" => BenchmarkSuites.Reasoning(),
+            "multi_turn" => BenchmarkSuites.MultiTurn(),
+            "context_window" => BenchmarkSuites.ContextWindow(),
             _ => throw new ArgumentException($"Unknown category: {category}"),
         };
 
@@ -64,7 +72,15 @@ public class BenchmarkSuitesTests
         Assert.All(all, p =>
         {
             Assert.False(string.IsNullOrWhiteSpace(p.SystemMessage));
-            Assert.False(string.IsNullOrWhiteSpace(p.UserMessage));
+
+            if (p.IsMultiTurn)
+            {
+                Assert.All(p.Turns, t => Assert.False(string.IsNullOrWhiteSpace(t.UserMessage)));
+            }
+            else
+            {
+                Assert.False(string.IsNullOrWhiteSpace(p.UserMessage));
+            }
         });
     }
 
@@ -106,5 +122,83 @@ public class BenchmarkSuitesTests
         var prompts = BenchmarkSuites.Extraction();
 
         Assert.True(prompts.Count >= 2, "Extraction should have at least 2 prompts");
+    }
+
+    [Fact]
+    public void MultiTurn_AllPromptsAreMultiTurn()
+    {
+        var prompts = BenchmarkSuites.MultiTurn();
+
+        Assert.True(prompts.Count >= 2, "MultiTurn should have at least 2 prompts");
+        Assert.All(prompts, p =>
+        {
+            Assert.True(p.IsMultiTurn, $"{p.Name} should be multi-turn");
+            Assert.True(p.Turns.Count >= 2, $"{p.Name} should have at least 2 turns");
+        });
+    }
+
+    [Fact]
+    public void MultiTurn_EachTurnHasExpectedOutput()
+    {
+        var prompts = BenchmarkSuites.MultiTurn();
+
+        Assert.All(prompts, p =>
+        {
+            Assert.All(p.Turns, turn =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(turn.UserMessage), $"{p.Name}: turn has empty message");
+                Assert.NotNull(turn.Expected);
+                Assert.True(turn.Expected.PassThreshold > 0, $"{p.Name}: turn has zero pass threshold");
+            });
+        });
+    }
+
+    [Fact]
+    public void ContextWindow_HasMinimumPromptCount()
+    {
+        var prompts = BenchmarkSuites.ContextWindow();
+
+        Assert.True(prompts.Count >= 3, "ContextWindow should have at least 3 prompts (NIAH + multi-key + variable tracking)");
+    }
+
+    [Fact]
+    public void ContextWindow_PromptsHaveLongContext()
+    {
+        var prompts = BenchmarkSuites.ContextWindow();
+
+        Assert.All(prompts, p =>
+        {
+            // Context window prompts should have substantial user messages
+            Assert.True(p.UserMessage.Length > 1000, $"{p.Name}: context window prompt should be >1000 chars, was {p.UserMessage.Length}");
+        });
+    }
+
+    [Fact]
+    public void AllPrompts_HaveValidDifficulty()
+    {
+        var all = BenchmarkSuites.All();
+
+        Assert.All(all, p => Assert.True(
+            p.Difficulty is BenchmarkDifficulty.Level1 or BenchmarkDifficulty.Level2 or BenchmarkDifficulty.Level3,
+            $"{p.Name} has invalid difficulty"));
+    }
+
+    [Fact]
+    public void UpToLevel_Level1_ExcludesHarderPrompts()
+    {
+        var level1Only = BenchmarkSuites.UpToLevel(BenchmarkDifficulty.Level1);
+        var all = BenchmarkSuites.All();
+
+        Assert.True(level1Only.Count < all.Count, "Level 1 filter should exclude some prompts");
+        Assert.All(level1Only, p => Assert.Equal(BenchmarkDifficulty.Level1, p.Difficulty));
+    }
+
+    [Fact]
+    public void UpToLevel_Level3_IncludesAll()
+    {
+        var level3 = BenchmarkSuites.UpToLevel(BenchmarkDifficulty.Level3);
+        var all = BenchmarkSuites.All();
+
+        Assert.Equal(all.Count, level3.Count);
     }
 }

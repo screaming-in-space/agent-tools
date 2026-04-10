@@ -159,6 +159,19 @@ public sealed class SpectreAgentOutput : IAgentOutput
         finally { _lock.Release(); }
     }
 
+    public async Task ReportPromptResultAsync(string promptName, double tokensPerSecond, double accuracyScore)
+    {
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_activeScanner is not null && _scannerWork.TryGetValue(_activeScanner, out var work))
+            {
+                work.Metrics.Add((promptName, tokensPerSecond, accuracyScore));
+            }
+        }
+        finally { _lock.Release(); }
+    }
+
     public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct).ConfigureAwait(false);
@@ -313,6 +326,23 @@ public sealed class SpectreAgentOutput : IAgentOutput
                 var statusIcon = toolOk ? "" : " ✗";
                 var detailText = detail is not null ? $" [{AgentTheme.DimLightHex}]{Markup.Escape(detail)}[/]" : "";
                 scannerNode.AddNode($"[{color}]{Markup.Escape(tool)}{detailText} [{AgentTheme.DimLightHex}]{secs:F1}s[/]{statusIcon}[/]");
+            }
+
+            // Per-prompt benchmark metrics (tok/s + accuracy)
+            if (work.Metrics.Count > 0)
+            {
+                var metricsNode = scannerNode.AddNode($"[{AgentTheme.SkyHex}]Results[/]");
+                foreach (var (prompt, tokS, score) in work.Metrics)
+                {
+                    var scoreColor = score >= 0.8 ? AgentTheme.GreenHex
+                        : score >= 0.5 ? AgentTheme.OrangeHex
+                        : AgentTheme.RedHex;
+                    var shortPrompt = prompt.Length > 24 ? prompt[..24] + "…" : prompt;
+                    metricsNode.AddNode(
+                        $"[{AgentTheme.DimLightHex}]{Markup.Escape(shortPrompt)}[/]  " +
+                        $"[{AgentTheme.CyanHex}]{tokS:F1}[/] [{AgentTheme.DimHex}]tok/s[/]  " +
+                        $"[{scoreColor}]{score:P0}[/]");
+                }
             }
 
             // Active scanner thinking preview (last 2 lines)

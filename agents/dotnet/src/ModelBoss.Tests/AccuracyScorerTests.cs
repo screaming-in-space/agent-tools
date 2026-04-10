@@ -221,12 +221,199 @@ public class AccuracyScorerTests
         Assert.Equal("test-model", result.ModelId);
     }
 
+    // ── Score: Forbidden preamble ─────────────────────────────────────
+
+    [Fact]
+    public void Score_CleanPreamble_FullScore()
+    {
+        var prompt = MakePrompt(
+            forbiddenPreamble: ["Sure", "Of course", "Here's"],
+            minLength: 5);
+
+        var result = AccuracyScorer.Score("test-model", prompt, "The answer is 42.");
+
+        var check = result.Checks.Single(c => c.Name == "preamble");
+        Assert.Equal(1.0, check.Score);
+    }
+
+    [Fact]
+    public void Score_PreambleContainsFiller_ZeroScore()
+    {
+        var prompt = MakePrompt(
+            forbiddenPreamble: ["Sure", "Of course", "Here's"],
+            minLength: 5);
+
+        var result = AccuracyScorer.Score("test-model", prompt, "Sure! The answer is 42.");
+
+        var check = result.Checks.Single(c => c.Name == "preamble");
+        Assert.Equal(0.0, check.Score);
+    }
+
+    [Fact]
+    public void Score_FillerAfterFirst100Chars_NotPenalized()
+    {
+        var prompt = MakePrompt(
+            forbiddenPreamble: ["Sure"],
+            minLength: 5);
+
+        // Place "Sure" well past the first 100 characters
+        var output = new string('x', 120) + " Sure, that is fine.";
+
+        var result = AccuracyScorer.Score("test-model", prompt, output);
+
+        var check = result.Checks.Single(c => c.Name == "preamble");
+        Assert.Equal(1.0, check.Score);
+    }
+
+    // ── Score: Multi-turn ──────────────────────────────────────────────
+
+    [Fact]
+    public void Score_MultiTurn_ScoresAllTurns()
+    {
+        var prompt = MakeMultiTurnPrompt(
+            [
+                new ConversationTurn
+                {
+                    UserMessage = "Write a greeting.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["hello"],
+                        MinLength = 3,
+                    },
+                },
+                new ConversationTurn
+                {
+                    UserMessage = "Now make it formal.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["greetings"],
+                        MinLength = 3,
+                    },
+                },
+            ]);
+
+        var rawOutput = "hello world\n---TURN_2---\ngreetings, esteemed colleague";
+
+        var result = AccuracyScorer.Score("test-model", prompt, rawOutput);
+
+        Assert.Contains(result.Checks, c => c.Name.StartsWith("turn1_", StringComparison.Ordinal));
+        Assert.Contains(result.Checks, c => c.Name.StartsWith("turn2_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Score_MultiTurn_LaterTurnsWeightedHigher()
+    {
+        // Turn 1: perfect. Turn 2: fails required substring.
+        var prompt = MakeMultiTurnPrompt(
+            [
+                new ConversationTurn
+                {
+                    UserMessage = "Say alpha.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["alpha"],
+                        MinLength = 3,
+                    },
+                },
+                new ConversationTurn
+                {
+                    UserMessage = "Say beta.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["beta"],
+                        MinLength = 3,
+                    },
+                },
+            ]);
+
+        var goodBoth = "alpha\n---TURN_2---\nbeta";
+        var goodFirstOnly = "alpha\n---TURN_2---\nwrong answer";
+
+        var scoreBoth = AccuracyScorer.Score("test-model", prompt, goodBoth);
+        var scoreFirstOnly = AccuracyScorer.Score("test-model", prompt, goodFirstOnly);
+
+        // Failing the later (higher-weighted) turn should drop the score more
+        Assert.True(scoreBoth.Score > scoreFirstOnly.Score);
+    }
+
+    [Fact]
+    public void Score_MultiTurn_MissingTurnMarker_GracefullyDegrades()
+    {
+        var prompt = MakeMultiTurnPrompt(
+            [
+                new ConversationTurn
+                {
+                    UserMessage = "Say one.",
+                    Expected = new ExpectedOutput { MinLength = 1 },
+                },
+                new ConversationTurn
+                {
+                    UserMessage = "Say two.",
+                    Expected = new ExpectedOutput { MinLength = 1 },
+                },
+            ]);
+
+        // No turn marker — all output goes to turn 1, turn 2 gets empty string
+        var rawOutput = "one two three";
+
+        var result = AccuracyScorer.Score("test-model", prompt, rawOutput);
+
+        // Should still produce a result without throwing
+        Assert.Equal("test-model", result.ModelId);
+        Assert.True(result.Score >= 0);
+    }
+
+    [Fact]
+    public void Score_MultiTurn_ThreeTurns_AllScored()
+    {
+        var prompt = MakeMultiTurnPrompt(
+            [
+                new ConversationTurn
+                {
+                    UserMessage = "Turn 1.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["first"],
+                        MinLength = 3,
+                    },
+                },
+                new ConversationTurn
+                {
+                    UserMessage = "Turn 2.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["second"],
+                        MinLength = 3,
+                    },
+                },
+                new ConversationTurn
+                {
+                    UserMessage = "Turn 3.",
+                    Expected = new ExpectedOutput
+                    {
+                        RequiredSubstrings = ["third"],
+                        MinLength = 3,
+                    },
+                },
+            ]);
+
+        var rawOutput = "first answer\n---TURN_2---\nsecond answer\n---TURN_3---\nthird answer";
+
+        var result = AccuracyScorer.Score("test-model", prompt, rawOutput);
+
+        Assert.Contains(result.Checks, c => c.Name.StartsWith("turn1_", StringComparison.Ordinal));
+        Assert.Contains(result.Checks, c => c.Name.StartsWith("turn2_", StringComparison.Ordinal));
+        Assert.Contains(result.Checks, c => c.Name.StartsWith("turn3_", StringComparison.Ordinal));
+        Assert.True(result.Passed);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static BenchmarkPrompt MakePrompt(
         IReadOnlyList<string>? requiredSubstrings = null,
         IReadOnlyList<string>? forbiddenSubstrings = null,
         IReadOnlyList<string>? requiredStructure = null,
+        IReadOnlyList<string>? forbiddenPreamble = null,
         string? referenceOutput = null,
         int minLength = 0,
         int maxLength = int.MaxValue,
@@ -243,11 +430,25 @@ public class AccuracyScorerTests
                 RequiredSubstrings = requiredSubstrings ?? [],
                 ForbiddenSubstrings = forbiddenSubstrings ?? [],
                 RequiredStructure = requiredStructure ?? [],
+                ForbiddenPreamble = forbiddenPreamble ?? [],
                 ReferenceOutput = referenceOutput ?? "",
                 MinLength = minLength,
                 MaxLength = maxLength,
                 PassThreshold = passThreshold,
             },
+        };
+    }
+
+    private static BenchmarkPrompt MakeMultiTurnPrompt(IReadOnlyList<ConversationTurn> turns)
+    {
+        return new BenchmarkPrompt
+        {
+            Name = "test_multi_turn",
+            Category = "multi_turn",
+            SystemMessage = "You are a helpful assistant.",
+            UserMessage = "",
+            Expected = new ExpectedOutput(),
+            Turns = turns,
         };
     }
 }

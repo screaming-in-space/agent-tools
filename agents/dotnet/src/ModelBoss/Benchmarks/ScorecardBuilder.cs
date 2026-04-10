@@ -8,6 +8,7 @@ public static class ScorecardBuilder
 {
     /// <summary>
     /// Builds a scorecard for one model from its benchmark and accuracy results.
+    /// No LLM-as-judge scores — uses deterministic-only composite formula.
     /// </summary>
     public static ModelScorecard Build(
         string configKey,
@@ -15,6 +16,24 @@ public static class ScorecardBuilder
         Dictionary<string, IReadOnlyList<BenchmarkResult>> benchmarkResults,
         Dictionary<string, AccuracyResult> accuracyResults,
         ModelSummary? registryInfo)
+    {
+        return Build(configKey, modelOptions, benchmarkResults, accuracyResults, registryInfo,
+            judgeResults: null, isJudgeModel: false);
+    }
+
+    /// <summary>
+    /// Builds a scorecard incorporating LLM-as-judge scores into the composite.
+    /// Pass <paramref name="judgeResults"/> as <c>null</c> for the judge model itself
+    /// and set <paramref name="isJudgeModel"/> to <c>true</c>.
+    /// </summary>
+    public static ModelScorecard Build(
+        string configKey,
+        Agent.SDK.Configuration.AgentModelOptions modelOptions,
+        Dictionary<string, IReadOnlyList<BenchmarkResult>> benchmarkResults,
+        Dictionary<string, AccuracyResult> accuracyResults,
+        ModelSummary? registryInfo,
+        Dictionary<string, JudgeResult>? judgeResults,
+        bool isJudgeModel)
     {
         ArgumentNullException.ThrowIfNull(benchmarkResults);
         ArgumentNullException.ThrowIfNull(accuracyResults);
@@ -24,13 +43,26 @@ public static class ScorecardBuilder
 
         // ── Speed metrics ──────────────────────────────────────────────
         var tokensPerSec = allBenchmarks.Select(b => b.TokensPerSecond).OrderBy(x => x).ToList();
+        var genToksPerSec = allBenchmarks.Select(b => b.GenerationTokensPerSecond).OrderBy(x => x).ToList();
         var ttfts = allBenchmarks.Select(b => b.TimeToFirstToken).OrderBy(x => x).ToList();
         var durations = allBenchmarks.Select(b => b.TotalDuration).OrderBy(x => x).ToList();
 
         var medianTps = Percentile(tokensPerSec, 0.5);
         var p5Tps = Percentile(tokensPerSec, 0.05);
+        var medianGenTps = Percentile(genToksPerSec, 0.5);
         var medianTtft = ttfts.Count > 0 ? PercentileTimeSpan(ttfts, 0.5) : TimeSpan.Zero;
         var medianDuration = durations.Count > 0 ? PercentileTimeSpan(durations, 0.5) : TimeSpan.Zero;
+
+        // ── Thinking metrics ───────────────────────────────────────────
+        var totalThinkingTokens = allBenchmarks.Sum(b => b.ThinkingTokens);
+        var thinkingDurations = allBenchmarks
+            .Where(b => b.ThinkingTokens > 0)
+            .Select(b => b.ThinkingDuration)
+            .OrderBy(x => x)
+            .ToList();
+        var medianThinkingDuration = thinkingDurations.Count > 0
+            ? PercentileTimeSpan(thinkingDurations, 0.5)
+            : TimeSpan.Zero;
 
         // ── Accuracy metrics ───────────────────────────────────────────
         var meanAccuracy = allAccuracy.Count > 0
@@ -42,7 +74,22 @@ public static class ScorecardBuilder
         // Normalize speed: 50 tok/s = 1.0, linear scale
         var normalizedSpeed = Math.Min(1.0, medianTps / 50.0);
         var passRate = allAccuracy.Count > 0 ? (double)passedCount / allAccuracy.Count : 0;
-        var compositeScore = (meanAccuracy * 0.6) + (normalizedSpeed * 0.3) + (passRate * 0.1);
+
+        // ── Judge metrics ──────────────────────────────────────────────
+        var parsedJudge = judgeResults?.Values.Where(j => j.Parsed).ToList();
+        var meanJudge = parsedJudge is { Count: > 0 }
+            ? parsedJudge.Average(j => (double)j.Score)
+            : (double?)null;
+        var meanJudgeNorm = parsedJudge is { Count: > 0 }
+            ? parsedJudge.Average(j => j.NormalizedScore)
+            : (double?)null;
+        var judgedCount = parsedJudge?.Count ?? 0;
+
+        // With judge: (accuracy × 0.35) + (judge × 0.30) + (speed × 0.25) + (pass_rate × 0.10)
+        // Without:    (accuracy × 0.60) + (speed × 0.30) + (pass_rate × 0.10)
+        var compositeScore = meanJudgeNorm.HasValue
+            ? (meanAccuracy * 0.35) + (meanJudgeNorm.Value * 0.30) + (normalizedSpeed * 0.25) + (passRate * 0.10)
+            : (meanAccuracy * 0.60) + (normalizedSpeed * 0.30) + (passRate * 0.10);
 
         // ── Per-prompt detail ──────────────────────────────────────────
         var promptResults = new List<PromptResult>();
@@ -57,11 +104,15 @@ public static class ScorecardBuilder
 
             if (accuracyResults.TryGetValue(promptName, out var accuracy))
             {
+                JudgeResult? judge = null;
+                judgeResults?.TryGetValue(promptName, out judge);
+
                 promptResults.Add(new PromptResult
                 {
                     PromptName = promptName,
                     Benchmark = benchmark,
                     Accuracy = accuracy,
+                    Judge = judge,
                 });
             }
         }
@@ -73,11 +124,18 @@ public static class ScorecardBuilder
             RegistryInfo = registryInfo,
             MedianTokensPerSecond = medianTps,
             P5TokensPerSecond = p5Tps,
+            MedianGenerationTokensPerSecond = medianGenTps,
             MedianTimeToFirstToken = medianTtft,
             MedianTotalDuration = medianDuration,
+            TotalThinkingTokens = totalThinkingTokens,
+            MedianThinkingDuration = medianThinkingDuration,
             MeanAccuracyScore = meanAccuracy,
             PromptsPassedCount = passedCount,
             TotalPromptsCount = allAccuracy.Count,
+            MeanJudgeScore = meanJudge,
+            MeanJudgeNormalized = meanJudgeNorm,
+            JudgedPromptCount = judgedCount,
+            IsJudgeModel = isJudgeModel,
             CompositeScore = compositeScore,
             PromptResults = promptResults,
         };

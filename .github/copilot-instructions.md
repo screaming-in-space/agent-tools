@@ -19,6 +19,7 @@
 - `async` all the way — propagate `CancellationToken` on every public method.
 - Central Package Management — versions in `Directory.Packages.props` only.
 - Test naming: `MethodName_Condition_ExpectedBehavior`. xUnit + NSubstitute.
+- Use `InternalsVisibleTo` for test projects instead of making internal methods public for testing.
 
 ## Build & test
 
@@ -26,4 +27,3 @@
 cd agents/dotnet
 dotnet build
 dotnet test
-```

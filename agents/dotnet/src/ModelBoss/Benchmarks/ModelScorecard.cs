@@ -17,17 +17,31 @@ public sealed record ModelScorecard
 
     // ── Speed metrics (aggregated across all prompts) ──────────────────
 
-    /// <summary>Median tokens per second across all benchmark runs.</summary>
+    /// <summary>Median tokens per second across all benchmark runs (visible output / total duration).</summary>
     public required double MedianTokensPerSecond { get; init; }
 
-    /// <summary>P95 tokens per second (5th percentile — worst realistic case).</summary>
+    /// <summary>P5 tokens per second (5th percentile — worst realistic case).</summary>
     public required double P5TokensPerSecond { get; init; }
 
-    /// <summary>Median time-to-first-token across all runs.</summary>
+    /// <summary>Median generation tok/s (visible output / generation time, excluding thinking).</summary>
+    public required double MedianGenerationTokensPerSecond { get; init; }
+
+    /// <summary>Median time-to-first-visible-token across all runs.</summary>
     public required TimeSpan MedianTimeToFirstToken { get; init; }
 
     /// <summary>Median total request duration across all runs.</summary>
     public required TimeSpan MedianTotalDuration { get; init; }
+
+    // ── Thinking metrics ───────────────────────────────────────────────
+
+    /// <summary>Total thinking tokens across all measured runs. Zero when model does not think.</summary>
+    public required int TotalThinkingTokens { get; init; }
+
+    /// <summary>Median thinking duration across runs. Zero when model does not think.</summary>
+    public required TimeSpan MedianThinkingDuration { get; init; }
+
+    /// <summary>Whether this model produced any thinking tokens during benchmarks.</summary>
+    public bool UsesThinking => TotalThinkingTokens > 0;
 
     // ── Accuracy metrics ───────────────────────────────────────────────
 
@@ -45,11 +59,26 @@ public sealed record ModelScorecard
         ? (double)PromptsPassedCount / TotalPromptsCount
         : 0;
 
+    // ── LLM-as-judge metrics ───────────────────────────────────────────
+
+    /// <summary>Mean judge score (1-10) across all judged prompts. Null when this model was the judge or judging was skipped.</summary>
+    public double? MeanJudgeScore { get; init; }
+
+    /// <summary>Normalized mean judge score (0.0 to 1.0). Null when not judged.</summary>
+    public double? MeanJudgeNormalized { get; init; }
+
+    /// <summary>Number of prompts successfully judged by the LLM judge.</summary>
+    public int JudgedPromptCount { get; init; }
+
+    /// <summary>Whether this model served as the judge (and therefore has no judge scores).</summary>
+    public bool IsJudgeModel { get; init; }
+
     // ── Composite ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Composite score combining speed and accuracy. Higher is better.
-    /// Formula: <c>(accuracy * 0.6) + (normalized_speed * 0.3) + (pass_rate * 0.1)</c>
+    /// Composite score combining speed, accuracy, and judge evaluation. Higher is better.
+    /// Without judge: <c>(accuracy × 0.6) + (normalized_speed × 0.3) + (pass_rate × 0.1)</c>
+    /// With judge: <c>(accuracy × 0.35) + (judge × 0.30) + (normalized_speed × 0.25) + (pass_rate × 0.1)</c>
     /// </summary>
     public required double CompositeScore { get; init; }
 
@@ -65,6 +94,9 @@ public sealed record PromptResult
     public required string PromptName { get; init; }
     public required BenchmarkResult Benchmark { get; init; }
     public required AccuracyResult Accuracy { get; init; }
+
+    /// <summary>LLM-as-judge result. Null when this model was the judge or judging was skipped.</summary>
+    public JudgeResult? Judge { get; init; }
 }
 
 /// <summary>

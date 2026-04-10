@@ -89,6 +89,7 @@ public sealed class StreamingInterceptorTests
         public Task ToolStartedAsync(string toolName, string? detail = null) => Task.CompletedTask;
         public Task ToolCompletedAsync(string toolName, TimeSpan elapsed, string? detail = null, bool success = true) => Task.CompletedTask;
         public Task AppendThinkingAsync(string token) => Task.CompletedTask;
+        public Task ReportPromptResultAsync(string promptName, double tokensPerSecond, double accuracyScore) => Task.CompletedTask;
         public Task StopAsync(AgentRunSummary summary, CancellationToken ct = default) => Task.CompletedTask;
         public Task WriteResponseAsync(string text) => Task.CompletedTask;
         public void Dispose() { }

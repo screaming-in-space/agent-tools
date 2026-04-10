@@ -104,6 +104,17 @@ public sealed class PlainAgentOutput : IAgentOutput
 
     public Task AppendThinkingAsync(string token) => Task.CompletedTask;
 
+    public Task ReportPromptResultAsync(string promptName, double tokensPerSecond, double accuracyScore)
+    {
+        if (_activeScanner is not null && _scannerWork.TryGetValue(_activeScanner, out var work))
+        {
+            work.Metrics.Add((promptName, tokensPerSecond, accuracyScore));
+        }
+
+        Log.Information("  {Prompt}: {TokS:F1} tok/s, accuracy={Score:P0}", promptName, tokensPerSecond, accuracyScore);
+        return Task.CompletedTask;
+    }
+
     public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
     {
         Log.Information("Completed in {Duration:F1}s - {ToolCalls} tool calls, output: {Output}",

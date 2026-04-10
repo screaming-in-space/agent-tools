@@ -1,8 +1,27 @@
 namespace ModelBoss.Benchmarks;
 
 /// <summary>
+/// Difficulty level for progressive benchmark testing.
+/// Level 1 prompts verify basic capability; Level 2 tests stricter compliance;
+/// Level 3 stresses edge cases and full-context performance.
+/// </summary>
+public enum BenchmarkDifficulty
+{
+    /// <summary>Basic capability — can the model follow directions at all?</summary>
+    Level1 = 1,
+
+    /// <summary>Stricter compliance — fewer guardrails, harder constraints, ambiguous input.</summary>
+    Level2 = 2,
+
+    /// <summary>Stress testing — long context, multi-step chains, adversarial constraints.</summary>
+    Level3 = 3,
+}
+
+/// <summary>
 /// Defines a benchmark prompt with expected output criteria for accuracy scoring.
 /// Each prompt tests a specific model capability (instruction following, extraction, tool use, etc.).
+/// Single-turn prompts use <see cref="UserMessage"/> + <see cref="Expected"/>.
+/// Multi-turn prompts (MT-Bench style) use <see cref="Turns"/> instead.
 /// </summary>
 public sealed record BenchmarkPrompt
 {
@@ -12,17 +31,43 @@ public sealed record BenchmarkPrompt
     /// <summary>Category for grouping (e.g. "instruction_following", "extraction", "tool_calling").</summary>
     public required string Category { get; init; }
 
+    /// <summary>Difficulty level for progressive testing. Models failing ≥90% at a level skip harder ones.</summary>
+    public BenchmarkDifficulty Difficulty { get; init; } = BenchmarkDifficulty.Level1;
+
     /// <summary>System prompt to send to the model.</summary>
     public required string SystemMessage { get; init; }
 
-    /// <summary>User prompt to send to the model.</summary>
+    /// <summary>User prompt to send to the model (single-turn mode). Ignored when <see cref="Turns"/> is populated.</summary>
     public required string UserMessage { get; init; }
 
-    /// <summary>Expected characteristics of a correct response.</summary>
+    /// <summary>Expected characteristics of a correct response (single-turn mode). Ignored when <see cref="Turns"/> is populated.</summary>
     public required ExpectedOutput Expected { get; init; }
+
+    /// <summary>
+    /// Multi-turn conversation sequence (MT-Bench style). When non-empty, the runner sends
+    /// each turn sequentially maintaining conversation history, and scores each turn independently.
+    /// <see cref="UserMessage"/> and <see cref="Expected"/> are ignored in multi-turn mode.
+    /// </summary>
+    public IReadOnlyList<ConversationTurn> Turns { get; init; } = [];
+
+    /// <summary>Whether this prompt uses multi-turn conversation.</summary>
+    public bool IsMultiTurn => Turns.Count > 0;
 
     /// <summary>Maximum time allowed for this prompt before marking it as failed.</summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(60);
+}
+
+/// <summary>
+/// A single turn in a multi-turn conversation benchmark.
+/// Each turn sends a user message and evaluates the model's response independently.
+/// </summary>
+public sealed record ConversationTurn
+{
+    /// <summary>User message for this turn. May reference prior context implicitly.</summary>
+    public required string UserMessage { get; init; }
+
+    /// <summary>Expected output criteria for this turn's response.</summary>
+    public required ExpectedOutput Expected { get; init; }
 }
 
 /// <summary>
@@ -39,6 +84,13 @@ public sealed record ExpectedOutput
 
     /// <summary>Markdown structural elements required (e.g. "#", "|", "- ").</summary>
     public IReadOnlyList<string> RequiredStructure { get; init; } = [];
+
+    /// <summary>
+    /// Substrings that must NOT appear in the first 100 characters of the response.
+    /// Catches preamble filler like "Sure!", "Of course!", "Here's" even when
+    /// ForbiddenSubstrings allows them deeper in the output.
+    /// </summary>
+    public IReadOnlyList<string> ForbiddenPreamble { get; init; } = [];
 
     /// <summary>
     /// Reference output for similarity scoring. Empty means skip similarity check.

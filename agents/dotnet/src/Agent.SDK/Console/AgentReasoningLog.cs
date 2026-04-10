@@ -10,6 +10,7 @@ public sealed class ScannerTrace
     public required string Name { get; init; }
     public required string ModelName { get; init; }
     public List<(string Tool, string? Detail, double Seconds, bool Success)> Tools { get; } = [];
+    public List<(string Prompt, double TokPerSec, double AccuracyScore)> Metrics { get; } = [];
     public StringBuilder Thinking { get; } = new();
     public StringBuilder Response { get; } = new();
     public TimeSpan? Elapsed { get; set; }
