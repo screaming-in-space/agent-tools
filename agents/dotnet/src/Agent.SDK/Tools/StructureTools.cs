@@ -274,7 +274,7 @@ public static class StructureTools
             indicators["Vertical Slice"] += 3;
 
         // Microservices indicators
-        var projectCount = Regex.Matches(lower, @"\.csproj|\.fsproj").Count;
+        var projectCount = Regex.Count(lower, @"\.csproj|\.fsproj");
         if (Regex.IsMatch(lower, @"\b(gateway|worker|relay|service\d|micro)\b"))
             indicators["Microservices"] += 2;
         if (projectCount > 10)
@@ -366,5 +366,5 @@ public static class StructureTools
         visited.Remove(node);
     }
 
-    private record ProjectInfo(string OutputType, string TargetFramework, int ProjectRefCount, int PackageRefCount);
+    private sealed record ProjectInfo(string OutputType, string TargetFramework, int ProjectRefCount, int PackageRefCount);
 }

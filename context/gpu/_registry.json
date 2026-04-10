@@ -1,0 +1,31 @@
+{
+  "$schema": "gpu-registry-v1",
+  "gpus": {
+    "rtx-4090-mobile": {
+      "vram_gb": 16,
+      "bandwidth_gb_s": 640,
+      "compute_capability": "8.9",
+      "cuda_cores": 9728,
+      "fits": {
+        "nvidia-nemotron-3-nano-4b": { "q8": true, "q4": true },
+        "google-gemma-4-e4b-it": { "q8": true, "q4": true },
+        "google-gemma-4-26b-a4b-it": { "q4": "tight" },
+        "google-gemma-4-31b-it": { "q4": false }
+      },
+      "profile": "nvidia-rtx-4090-mobile.md"
+    },
+    "rtx-5090-msi-suprim": {
+      "vram_gb": 32,
+      "bandwidth_gb_s": 1792,
+      "compute_capability": "10.0",
+      "cuda_cores": 21760,
+      "fits": {
+        "nvidia-nemotron-3-nano-4b": { "q8": true, "q4": true },
+        "google-gemma-4-e4b-it": { "q8": true, "q4": true },
+        "google-gemma-4-26b-a4b-it": { "q8": true, "q4": true },
+        "google-gemma-4-31b-it": { "q8": "tight", "q4": true }
+      },
+      "profile": "nvidia-rtx-5090-msi-suprim.md"
+    }
+  }
+}

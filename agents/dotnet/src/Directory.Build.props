@@ -14,6 +14,14 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
+  <!-- Code analysis -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
   <!-- Auto-import test infrastructure for *.Tests projects -->
   <Import Project="$(MSBuildThisFileDirectory)Test.Build.props"
           Condition="$(MSBuildProjectName.EndsWith('.Tests'))" />

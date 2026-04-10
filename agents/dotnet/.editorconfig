@@ -19,7 +19,7 @@ trim_trailing_whitespace = false
 [*.cs]
 
 # Default severity for analyzer diagnostics with category 'Style'
-dotnet_analyzer_diagnostic.category-Style.severity = silent
+dotnet_analyzer_diagnostic.category-Style.severity = suggestion
 
 # Braces - always required
 csharp_prefer_braces = true:error
@@ -51,3 +51,12 @@ dotnet_style_null_propagation = true:suggestion
 
 # CA1873: Avoid potentially expensive logging
 dotnet_diagnostic.CA1873.severity = silent
+
+# CA1305: StringBuilder interpolation locale — all tool output is invariant English
+dotnet_diagnostic.CA1305.severity = silent
+
+# CA1848: LoggerMessage delegates — overkill for CLI agent with few log calls
+dotnet_diagnostic.CA1848.severity = silent
+
+# CA1707: Underscores in test names — standard xUnit Method_Scenario_Expected convention
+dotnet_diagnostic.CA1707.severity = silent

@@ -67,12 +67,12 @@ Running [unsloth/gemma-4-26B-A4B-it-GGUF](https://huggingface.co/unsloth/gemma-4
 
 MoE advantage: only 3.8B active params per token → faster inference than 31B dense despite larger total size.
 
-| Format | Size | Notes |
-|--------|------|-------|
-| UD-Q4_K_XL | 17.1 GB | Fits laptop RTX 4090 (16GB) with reduced context. Best speed/quality tradeoff. |
-| UD-Q5_K_XL | 21.2 GB | Desktop RTX 5090 (32GB). Good balance. |
-| Q8_0 | 26.9 GB | Desktop RTX 5090. Near full quality. |
-| BF16 | 50.5 GB | Needs 2x GPU or heavy CPU offload. |
+| Format | Size | VRAM | Notes |
+|--------|------|------|-------|
+| UD-Q4_K_XL | 17.1 GB | ~18 GB | Fits laptop RTX 4090 (16GB) with reduced context. Best speed/quality tradeoff. |
+| UD-Q5_K_XL | 21.2 GB | ~23 GB | Desktop RTX 5090 (32GB). Good balance. |
+| Q8_0 | 26.9 GB | ~28 GB | Desktop RTX 5090. Near full quality. |
+| BF16 | 50.5 GB | ~52 GB | Needs 2x GPU or heavy CPU offload. |
 
 ---
 
@@ -115,16 +115,16 @@ MoE advantage: only 3.8B active params per token → faster inference than 31B d
 
 ## Benchmarks
 
-| Benchmark | 26B-A4B | vs 31B |
-|-----------|---------|--------|
-| MMLU Pro | 82.6% | 85.2% |
-| AIME 2026 | 88.3% | 89.2% |
-| GPQA Diamond | 82.3% | 84.3% |
-| LiveCodeBench v6 | 77.1% | 80.0% |
-| Codeforces ELO | 1718 | 2150 |
-| MMMLU | 86.3% | 88.4% |
-| MMMU Pro | 73.8% | 76.9% |
-| MRCR v2 128K | 44.1% | 66.4% |
+| Benchmark | Score |
+|-----------|-------|
+| MMLU Pro | 82.6% |
+| AIME 2026 | 88.3% |
+| GPQA Diamond | 82.3% |
+| LiveCodeBench v6 | 77.1% |
+| Codeforces ELO | 1718 |
+| MMMLU | 86.3% |
+| MMMU Pro | 73.8% |
+| MRCR v2 128K | 44.1% |
 
 ---
 

@@ -63,8 +63,8 @@ All Gemma 4 models share this token set:
 
 Running [unsloth/gemma-4-31B-it-GGUF](https://huggingface.co/unsloth/gemma-4-31B-it-GGUF). RTX 5090 (32GB VRAM) fits up to Q8_0.
 
-| Format | Size | VRAM (approx) | Notes |
-|--------|------|---------------|-------|
+| Format | Size | VRAM | Notes |
+|--------|------|------|-------|
 | UD-Q4_K_XL | 18.8 GB | ~20 GB | Dynamic 4-bit. Best speed/quality for 32GB cards. |
 | Q5_K_M | 21.7 GB | ~23 GB | Good balance. |
 | Q6_K | 25.2 GB | ~27 GB | Near-lossless. |

@@ -71,12 +71,12 @@ All Gemma 4 models share this token set:
 
 Running [unsloth/gemma-4-E4B-it-GGUF](https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF). Fits on laptop RTX 4090 (16GB).
 
-| Format | Size | Notes |
-|--------|------|-------|
-| Q8_0 | 8.2 GB | Recommended — near full quality, fits 16GB with room for context |
-| Q6_K | 7.1 GB | Good balance |
-| UD-Q4_K_XL | 5.1 GB | Fastest, lowest VRAM |
-| BF16 | 15.1 GB | Full precision — tight fit on 16GB |
+| Format | Size | VRAM | Notes |
+|--------|------|------|-------|
+| Q8_0 | 8.2 GB | ~9 GB | Recommended — near full quality, fits 16GB with room for context |
+| Q6_K | 7.1 GB | ~8 GB | Good balance |
+| UD-Q4_K_XL | 5.1 GB | ~6 GB | Fastest, lowest VRAM |
+| BF16 | 15.1 GB | ~16 GB | Full precision — tight fit on 16GB |
 
 ---
 
@@ -90,6 +90,20 @@ Running [unsloth/gemma-4-E4B-it-GGUF](https://huggingface.co/unsloth/gemma-4-E4B
 | Repetition Penalty | 1.0 (disabled) |
 | Context | Start at 32K, max 128K |
 | Thinking | OFF for tool-calling scanners |
+
+### Thinking Mode
+
+Enable by prepending `<|think|>` to the system prompt. The model outputs:
+```
+<|channel>thought
+[internal reasoning]
+<channel|>
+[final answer]
+```
+
+For CSI tool-calling scanners, thinking OFF is recommended — tool calls don't benefit from chain-of-thought and it wastes tokens.
+
+**Multi-turn rule:** Strip thinking blocks from conversation history. Only keep the final answer.
 
 ---
 
@@ -150,6 +164,33 @@ Running [unsloth/gemma-4-E4B-it-GGUF](https://huggingface.co/unsloth/gemma-4-E4B
 - Prefer for scanners that benefit from multimodal (image/audio) input — none of the current CSI scanners do.
 - For heavy scanners, prefer 26B-A4B or 31B if available.
 - Use Q8_0 on 16GB VRAM for best quality.
+
+---
+
+## Deployment (Unsloth GGUF via llama-server)
+
+Laptop RTX 4090:
+```bash
+./llama.cpp/llama-server \
+    --model unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q8_0.gguf \
+    --alias "gemma-4-e4b-it" \
+    --ctx-size 32768 \
+    --temp 1.0 \
+    --top-p 0.95 \
+    --top-k 64 \
+    --port 1234 \
+    --chat-template-kwargs '{"enable_thinking":false}'
+```
+
+---
+
+## Known Behaviors (CSI-Specific)
+
+- **Per-Layer Embeddings overhead** — 8B total params in memory despite only 4.5B effective. VRAM usage is closer to an 8B dense model.
+- **Code fence wrapping** — Same as other Gemma 4 models. Prompts should forbid it.
+- **Thinking token bleed** — If thinking is enabled, may emit `<|channel>thought ... <channel|>` before tool calls. Disable thinking for CSI.
+- **Long context degradation** — MRCR v2 128K: 25.4%. Performance drops significantly at longer contexts. Keep context under 32K for reliability.
+- **Audio quirks** — Audio support is unique to E4B in the Gemma 4 family, but no current CSI scanners use it.
 
 ---
 

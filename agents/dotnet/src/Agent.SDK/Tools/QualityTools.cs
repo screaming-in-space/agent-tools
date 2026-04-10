@@ -180,7 +180,7 @@ public static class QualityTools
                 foreach (var line in lines)
                 {
                     var trimmed = line.TrimStart();
-                    if (trimmed.StartsWith("//") || trimmed.StartsWith("///") || trimmed.StartsWith("/*") || trimmed.StartsWith("*"))
+                    if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith("///", StringComparison.Ordinal) || trimmed.StartsWith("/*", StringComparison.Ordinal) || trimmed.StartsWith('*'))
                         commentLines++;
                     else if (trimmed.Length > 0)
                         codeLines++;
@@ -211,7 +211,7 @@ public static class QualityTools
                 }
 
                 // Count anti-patterns
-                totalAntiPatterns += Regex.Matches(content, @"\.(Result|Wait)\s*[(\s;]").Count;
+                totalAntiPatterns += Regex.Count(content, @"\.(Result|Wait)\s*[(\s;]");
                 totalAntiPatterns += root.DescendantNodes().OfType<CatchClauseSyntax>()
                     .Count(c => c.Block.Statements.Count == 0);
             }
@@ -280,8 +280,8 @@ public static class QualityTools
             var trimmed = line.TrimStart();
 
             // Comment detection
-            if (trimmed.StartsWith("//") || trimmed.StartsWith("#") || trimmed.StartsWith("--") ||
-                trimmed.StartsWith("/*") || trimmed.StartsWith("*") || trimmed.StartsWith("///"))
+            if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('#') || trimmed.StartsWith("--", StringComparison.Ordinal) ||
+                trimmed.StartsWith("/*", StringComparison.Ordinal) || trimmed.StartsWith('*') || trimmed.StartsWith("///", StringComparison.Ordinal))
                 commentCount++;
 
             // TODO/FIXME

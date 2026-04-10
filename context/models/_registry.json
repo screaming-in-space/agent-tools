@@ -1,0 +1,93 @@
+{
+  "$schema": "model-registry-v1",
+  "models": {
+    "nvidia-nemotron-3-nano-4b": {
+      "params_b": 4.0,
+      "architecture": "hybrid-mamba",
+      "active_params_b": 4.0,
+      "context_k": 262,
+      "vram_q4_gb": 3,
+      "vram_q8_gb": 5,
+      "vram_bf16_gb": 8,
+      "tool_calling": "qwen3_coder",
+      "thinking": true,
+      "inference": { "temperature": 0.6, "top_p": 0.95 },
+      "scanners": {
+        "markdown": "good",
+        "structure": "good",
+        "rules": "marginal",
+        "quality": "marginal",
+        "journal": "good",
+        "done": "good"
+      },
+      "notes": "Assign to light/medium. Marginal on heavy — loops after 10+ tool calls.",
+      "profile": "nvidia-nemotron-3-nano-4b.md"
+    },
+    "google-gemma-4-e4b-it": {
+      "params_b": 8.0,
+      "architecture": "dense",
+      "active_params_b": 4.5,
+      "context_k": 128,
+      "vram_q4_gb": 5,
+      "vram_q8_gb": 8,
+      "vram_bf16_gb": 15,
+      "tool_calling": "gemma4_native",
+      "thinking": true,
+      "inference": { "temperature": 1.0, "top_p": 0.95, "top_k": 64 },
+      "scanners": {
+        "markdown": "good",
+        "structure": "good",
+        "rules": "marginal",
+        "quality": "marginal",
+        "journal": "good",
+        "done": "good"
+      },
+      "notes": "Same effective tier as nano-4b for text. Prefer for multimodal scanners (none currently).",
+      "profile": "google-gemma-4-e4b-it.md"
+    },
+    "google-gemma-4-26b-a4b-it": {
+      "params_b": 25.2,
+      "architecture": "moe",
+      "active_params_b": 3.8,
+      "context_k": 256,
+      "vram_q4_gb": 17,
+      "vram_q8_gb": 27,
+      "vram_bf16_gb": 51,
+      "tool_calling": "gemma4_native",
+      "thinking": true,
+      "inference": { "temperature": 1.0, "top_p": 0.95, "top_k": 64 },
+      "scanners": {
+        "markdown": "excellent",
+        "structure": "excellent",
+        "rules": "good",
+        "quality": "good",
+        "journal": "excellent",
+        "done": "excellent"
+      },
+      "notes": "Best speed/quality tradeoff. 88% of 31B quality at ~7x speed via MoE.",
+      "profile": "google-gemma-4-26b-a4b-it.md"
+    },
+    "google-gemma-4-31b-it": {
+      "params_b": 30.7,
+      "architecture": "dense",
+      "active_params_b": 30.7,
+      "context_k": 256,
+      "vram_q4_gb": 20,
+      "vram_q8_gb": 33,
+      "vram_bf16_gb": 62,
+      "tool_calling": "gemma4_native",
+      "thinking": true,
+      "inference": { "temperature": 1.0, "top_p": 0.95, "top_k": 64 },
+      "scanners": {
+        "markdown": "excellent",
+        "structure": "excellent",
+        "rules": "excellent",
+        "quality": "excellent",
+        "journal": "excellent",
+        "done": "excellent"
+      },
+      "notes": "Strongest quality. Prefer for heavy scanners. Slow (dense 31B).",
+      "profile": "google-gemma-4-31b-it.md"
+    }
+  }
+}

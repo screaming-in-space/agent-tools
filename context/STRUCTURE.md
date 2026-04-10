@@ -31,7 +31,9 @@ agents/dotnet/
 │   ├── Agent.SDK/                     # Shared library: logging, telemetry, model config, file tools
 │   │   ├── Configuration/
 │   │   │   ├── AgentModelOptions.cs    # Lightweight model config bound from appsettings.json
-│   │   │   └── EndpointHealthCheck.cs  # GET /v1/models validation before agent run
+│   │   │   ├── AgentScanOptions.cs     # Scanner enable/disable flags from config + CLI
+│   │   │   ├── EndpointHealthCheck.cs  # GET /v1/models validation before agent run
+│   │   │   └── ModelRegistry.cs        # Compact model + GPU registry from _registry.json files
 │   │   ├── Logging/
 │   │   │   └── AgentLogging.cs        # Serilog bootstrap (Configure + CreateLoggerFactory)
 │   │   ├── Telemetry/
@@ -76,6 +78,7 @@ Shared class library. Contains reusable infrastructure that every agent needs bu
 |------|---------|
 | `Configuration/AgentModelOptions.cs` | Sealed record bound from `Models:{key}` in `appsettings.json`. Properties: `Endpoint`, `ApiKey`, `Model`, `Temperature?`, `TopP?`, `MaxOutputTokens?`. Static `Resolve(IConfiguration, configKey?)` does section lookup with `"default"` fallback. |
 | `Configuration/EndpointHealthCheck.cs` | Static `ValidateAsync` calls `GET /v1/models` on the configured endpoint. Verifies reachability and that the configured model is loaded. Returns `HealthCheckResult` record. |
+| `Configuration/ModelRegistry.cs` | Compact model + GPU registry loaded from `context/models/_registry.json` and `context/gpu/_registry.json`. Records: `ModelRegistry`, `ModelEntry`, `GpuEntry`, `ScannerRatings`, `InferenceSettings`. Static `Load(repoRoot)` with graceful fallback to empty. |
 | `Logging/AgentLogging.cs` | Static `Configure(IConfiguration?)` bootstraps Serilog with console output. `ReadFrom.Configuration` applies overrides from `appsettings.json`. `CreateLoggerFactory()` bridges Serilog to `ILoggerFactory`. |
 | `Telemetry/AgentTrace.cs` | Instance-based `AgentTrace(string sourceName)` - each agent creates one with its own `ActivitySource` name. `StartSpan` helper returns `Activity?`. |
 | `Telemetry/ActivityExtensions.cs` | Null-safe fluent extensions: `WithTag`, `RecordError`, `SetSuccess` - borrowed from Continuum Engine. |

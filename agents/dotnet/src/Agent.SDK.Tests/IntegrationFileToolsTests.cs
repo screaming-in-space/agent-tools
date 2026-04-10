@@ -81,7 +81,7 @@ public sealed class IntegrationFileToolsTests : IDisposable
     {
         var result = FileTools.ReadFileContent("context/RULES.md");
 
-        Assert.False(result.StartsWith("Error:"), $"Expected file content but got: {result[..Math.Min(result.Length, 200)]}");
+        Assert.False(result.StartsWith("Error:", StringComparison.Ordinal), $"Expected file content but got: {result[..Math.Min(result.Length, 200)]}");
         Assert.True(result.Length > 0);
     }
 

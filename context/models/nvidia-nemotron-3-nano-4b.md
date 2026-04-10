@@ -25,12 +25,12 @@ Model capability profile for planner evaluation.
 
 We run the [unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF](https://huggingface.co/unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF) quantizations.
 
-| Format | VRAM | Accuracy | Notes |
-|--------|------|----------|-------|
-| BF16 | ~8 GB | Baseline | Full precision, safetensors |
-| FP8 | ~4 GB | 100% median | 1.8x throughput, DGX Spark/Jetson Thor |
-| Q8_0 GGUF | ~5 GB | Near full | Recommended for quality-sensitive tasks |
-| Q4_K_M GGUF | ~3 GB | 100% median | Best for constrained VRAM, Ollama/llama.cpp |
+| Format | Size | VRAM | Notes |
+|--------|------|------|-------|
+| BF16 | 7.9 GB | ~8 GB | Full precision, safetensors |
+| FP8 | 4.0 GB | ~4 GB | 100% median accuracy, 1.8x throughput, DGX Spark/Jetson Thor |
+| Q8_0 GGUF | 4.2 GB | ~5 GB | Recommended for quality-sensitive tasks |
+| Q4_K_M GGUF | 2.5 GB | ~3 GB | Best for constrained VRAM, Ollama/llama.cpp |
 
 ---
 
@@ -94,18 +94,17 @@ Tool call parser: `qwen3_coder` (vLLM) or native via OpenAI-compatible API.
 
 ## Benchmarks
 
-| Benchmark | Reasoning OFF | Reasoning ON |
-|-----------|--------------|-------------|
-| IFEval-Prompt | 82.8 | 87.9 |
-| IFEval-Instruction | 88.0 | 92.0 |
-| MATH500 | — | 95.4 |
-| AIME25 | — | 78.5 |
-| GPQA | — | 53.2 |
-| BFCL v3 (tool calling) | 61.1 | 61.1 |
-| RULER (128K) | 91.1 | — |
-| HaluEval | 62.2 | — |
-| EQ-Bench3 | 63.2 | — |
-| Orak (Games) | 22.9 | — |
+| Benchmark | Score |
+|-----------|-------|
+| IFEval-Prompt | 82.8 (off) / 87.9 (on) |
+| IFEval-Instruction | 88.0 (off) / 92.0 (on) |
+| MATH500 | 95.4 |
+| AIME25 | 78.5 |
+| GPQA | 53.2 |
+| BFCL v3 (tool calling) | 61.1 |
+| RULER (128K) | 91.1 |
+| HaluEval | 62.2 |
+| EQ-Bench3 | 63.2 |
 
 ---
 

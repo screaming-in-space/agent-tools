@@ -336,7 +336,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
 
     public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
     {
-        await _lock.WaitAsync().ConfigureAwait(false);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             _summary = summary;
@@ -399,7 +399,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
         finally { _lock.Release(); }
     }
 
-    private IRenderable BuildHeader()
+    private Table BuildHeader()
     {
         var spin = _summary is null ? Spinner[_spinnerFrame] : "✓";
         var spinColor = _summary is null ? AgentTheme.OrangeHex : AgentTheme.GreenHex;
@@ -424,7 +424,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
     }
 
     /// <summary>Builds a tree where each scanner is a branch with nested tool calls.</summary>
-    private IRenderable? BuildScannerTree()
+    private Panel? BuildScannerTree()
     {
         if (_scannerOrder.Count == 0) return null;
 
@@ -517,7 +517,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
     }
 
     /// <summary>Scanner progress bar and summary.</summary>
-    private IRenderable BuildScannerProgress()
+    private Panel BuildScannerProgress()
     {
         var rows = new List<IRenderable>();
 

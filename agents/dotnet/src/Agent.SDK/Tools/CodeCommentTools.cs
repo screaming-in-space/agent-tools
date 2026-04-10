@@ -390,7 +390,7 @@ public static class CodeCommentTools
             }
 
             // XML doc comments (C#)
-            if (lang == "csharp" && line.StartsWith("///"))
+            if (lang == "csharp" && line.StartsWith("///", StringComparison.Ordinal))
             {
                 var text = line[3..].Trim();
                 docComments.Add($"L{lineNum}: {text}");
@@ -447,8 +447,7 @@ public static class CodeCommentTools
 
             if (inBlockComment)
             {
-                var endIdx = line.IndexOf("*/", StringComparison.Ordinal);
-                if (endIdx >= 0)
+                if (line.Contains("*/", StringComparison.Ordinal))
                 {
                     inBlockComment = false;
                 }
@@ -456,16 +455,16 @@ public static class CodeCommentTools
                 continue;
             }
 
-            if (line.StartsWith("/*"))
+            if (line.StartsWith("/*", StringComparison.Ordinal))
             {
-                inBlockComment = !line.Contains("*/");
+                inBlockComment = !line.Contains("*/", StringComparison.Ordinal);
                 var text = line.TrimStart('/').TrimStart('*').Trim();
                 if (text.Length > 0) docComments.Add($"L{lineNum}: {text}");
                 CheckTodoFixme(line, lineNum, todoMarkers);
                 continue;
             }
 
-            if (line.StartsWith("--"))
+            if (line.StartsWith("--", StringComparison.Ordinal))
             {
                 var text = line[2..].Trim();
                 if (text.Length > 0)
@@ -529,7 +528,7 @@ public static class CodeCommentTools
             var line = lines[i].TrimStart();
             var lineNum = i + 1;
 
-            if (line.StartsWith('#') && !line.StartsWith("#!"))
+            if (line.StartsWith('#') && !line.StartsWith("#!", StringComparison.Ordinal))
             {
                 var text = line[1..].Trim();
                 if (text.Length > 0)
