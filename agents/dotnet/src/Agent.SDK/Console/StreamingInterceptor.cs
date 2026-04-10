@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text;
 using Microsoft.Extensions.AI;
 
 namespace Agent.SDK.Console;
@@ -7,24 +6,13 @@ namespace Agent.SDK.Console;
 /// <summary>
 /// A <see cref="DelegatingChatClient"/> that intercepts streaming content from
 /// every LLM call — including intermediate calls between tool invocations.
-/// Captures both regular text and reasoning/thinking content.
-/// Writes a full debug trace to <c>{BaseDirectory}/streaming-debug.log</c>.
+/// Routes thinking tokens to <see cref="IAgentOutput.AppendThinking"/> and
+/// response tokens to <see cref="IAgentOutput.WriteResponse"/>.
+/// Delegates debug tracing to <see cref="AgentDebugLog"/>.
 /// </summary>
-public sealed class StreamingInterceptor : DelegatingChatClient
+public sealed class StreamingInterceptor(IChatClient inner, IAgentOutput output) : DelegatingChatClient(inner)
 {
-    private readonly IAgentOutput _output;
-    private readonly string _debugLogPath;
     private int _callCount;
-
-    public StreamingInterceptor(IChatClient inner, IAgentOutput output) : base(inner)
-    {
-        _output = output;
-        _debugLogPath = Path.Combine(AppContext.BaseDirectory, "streaming-debug.log");
-
-        // Start fresh each run
-        try { File.WriteAllText(_debugLogPath, $"=== Streaming Debug Log — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n\n"); }
-        catch { /* best effort */ }
-    }
 
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -32,7 +20,7 @@ public sealed class StreamingInterceptor : DelegatingChatClient
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var call = Interlocked.Increment(ref _callCount);
-        DebugLog($"\n── LLM Call #{call} ──────────────────────────────────────\n");
+        AgentDebugLog.Write($"\n── LLM Call #{call} ──────────────────────────────────────\n");
 
         await foreach (var update in base.GetStreamingResponseAsync(
             messages, options, cancellationToken).ConfigureAwait(false))
@@ -42,28 +30,28 @@ public sealed class StreamingInterceptor : DelegatingChatClient
                 switch (content)
                 {
                     case TextReasoningContent reasoning when reasoning.Text is { Length: > 0 }:
-                        DebugLog($"[THINKING] {reasoning.Text}");
-                        _output.AppendThinking(reasoning.Text);
+                        AgentDebugLog.Write($"[THINKING] {reasoning.Text}");
+                        await output.AppendThinkingAsync(reasoning.Text);
                         break;
 
                     case TextContent text when text.Text is { Length: > 0 }:
-                        DebugLog($"[RESPONSE] {text.Text}");
-                        _output.AppendThinking(text.Text);
+                        AgentDebugLog.Write($"[RESPONSE] {text.Text}");
+                        await output.WriteResponseAsync(text.Text);
                         break;
 
                     case FunctionCallContent fcc:
                         var args = fcc.Arguments is not null
-                            ? string.Join(", ", fcc.Arguments.Select(a => $"{a.Key}={Truncate(a.Value?.ToString(), 80)}"))
+                            ? string.Join(", ", fcc.Arguments.Select(a => $"{a.Key}={AgentDebugLog.Truncate(a.Value?.ToString(), 80)}"))
                             : "";
-                        DebugLog($"\n[TOOL_CALL] {fcc.Name}({args})\n");
+                        AgentDebugLog.Write($"\n[TOOL_CALL] {fcc.Name}({args})\n");
                         break;
 
                     case FunctionResultContent frc:
-                        DebugLog($"\n[TOOL_RESULT] {frc.CallId} = {Truncate(frc.Result?.ToString(), 200)}\n");
+                        AgentDebugLog.Write($"\n[TOOL_RESULT] {frc.CallId} = {AgentDebugLog.Truncate(frc.Result?.ToString(), 2000)}\n");
                         break;
 
                     default:
-                        DebugLog($"[{content.GetType().Name}]");
+                        AgentDebugLog.Write($"[{content.GetType().Name}]");
                         break;
                 }
             }
@@ -71,17 +59,9 @@ public sealed class StreamingInterceptor : DelegatingChatClient
             yield return update;
         }
 
-        DebugLog($"\n── End Call #{call} ─────────────────────────────────────\n\n");
+        AgentDebugLog.Write($"\n── End Call #{call} ─────────────────────────────────────\n\n");
+        AgentDebugLog.Flush();
     }
-
-    private void DebugLog(string text)
-    {
-        try { File.AppendAllText(_debugLogPath, text); }
-        catch { /* best effort — don't break the agent if log write fails */ }
-    }
-
-    private static string? Truncate(string? s, int max)
-        => s is null ? null : s.Length <= max ? s : s[..max] + "...";
 }
 
 /// <summary>

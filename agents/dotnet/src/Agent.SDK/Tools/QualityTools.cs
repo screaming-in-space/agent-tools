@@ -12,7 +12,7 @@ namespace Agent.SDK.Tools;
 /// </summary>
 public static class QualityTools
 {
-    [Description("Analyzes a C# file using Roslyn. Returns per-method metrics: name, line count, cyclomatic complexity, parameter count. Per-file: class count, using count, namespace. Also flags async anti-patterns (.Result, .Wait(), async void) and bare catch blocks.")]
+    [Description("Analyzes a C# file using Roslyn. Returns per-method metrics (name, lines, complexity, params), file stats (classes, usings, namespace), and anti-patterns (.Result, .Wait(), async void, bare catch). Health grade: A=0 issues, B=1, C=2, D=3-4, F=5+. Issue triggers: >500 lines, >1000 lines, complexity>10, complexity>20, any anti-patterns, >3 anti-patterns, >20 methods.")]
     public static string AnalyzeCSharpFile(
         [Description("Path to the .cs file to analyze")] string filePath)
     {

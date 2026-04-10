@@ -70,5 +70,8 @@ public static class StructurePrompt
         - Show the real dependency direction, not an idealized one.
         - The directory tree should be concise: show src/ structure, skip bin/obj/node_modules.
         - Do NOT invent information. Every claim must come from actual project files.
+        - CRITICAL: Your final action MUST be calling `WriteOutput` with the output path and content.
+          Do NOT describe the output in text. Do NOT say "here is the result". CALL the tool.
+          If you do not call WriteOutput, your work is lost.
         """;
 }

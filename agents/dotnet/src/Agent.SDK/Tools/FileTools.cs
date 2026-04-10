@@ -81,7 +81,8 @@ public static class FileTools
         using var reader = new StreamReader(resolved, Encoding.UTF8);
         var charsRead = reader.ReadBlock(buffer, 0, maxChars);
 
-        return new string(buffer, 0, charsRead) + $"\n\n[Truncated - file exceeds {maxChars / 1024} KB]";
+        return new string(buffer, 0, charsRead) +
+            $"\n\n[Truncated at {charsRead:N0} of {fileInfo.Length:N0} chars — {(double)charsRead / fileInfo.Length:P0} of file shown]";
     }
 
     [Description("Extracts the structural elements from markdown content: YAML frontmatter fields, heading hierarchy, and markdown links. Uses a proper markdown parser so headings inside code blocks and links inside code spans are correctly ignored.")]

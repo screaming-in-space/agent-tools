@@ -14,8 +14,15 @@ public sealed class IntegrationFileToolsTests : IDisposable
 
     public IntegrationFileToolsTests()
     {
-        // Workspace: agent-tools/agents/dotnet  →  repo root: agent-tools
-        _repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", ".."));
+        // Walk up from bin output to the repo root (find .git directory)
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, ".git")))
+        {
+            dir = dir.Parent;
+        }
+
+        _repoRoot = dir?.FullName ?? throw new DirectoryNotFoundException(
+            $"Could not find git repo root from {AppContext.BaseDirectory}");
         _previousRoot = FileTools.RootDirectory;
         FileTools.RootDirectory = _repoRoot;
     }

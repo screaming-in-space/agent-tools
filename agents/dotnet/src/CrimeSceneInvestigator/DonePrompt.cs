@@ -69,5 +69,8 @@ public static class DonePrompt
         - A console app doesn't need API docs. A library doesn't need deployment scripts.
         - Be honest about gaps but don't manufacture problems.
         - Reference the actual files/projects found, not hypothetical ones.
+        - CRITICAL: Your final action MUST be calling `WriteOutput` with the output path and content.
+          Do NOT describe the output in text. Do NOT say "here is the result". CALL the tool.
+          If you do not call WriteOutput, your work is lost.
         """;
 }

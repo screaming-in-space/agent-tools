@@ -28,14 +28,15 @@ public interface IAgentOutput : IDisposable
     int ToolCallCount { get; }
 
     Task StartAsync(string agentName, CancellationToken ct = default);
-    void UpdateStatus(string status);
-    void ScannerStarted(string scannerName, string modelName);
-    void ScannerCompleted(string scannerName, TimeSpan elapsed, bool success);
-    void ToolStarted(string toolName, string? detail = null);
-    void ToolCompleted(string toolName, TimeSpan elapsed);
-    void AppendThinking(string token);
+    Task UpdateStatusAsync(string status);
+    Task ScannerStartedAsync(string scannerName, string modelName);
+    Task ScannerCompletedAsync(string scannerName, TimeSpan elapsed, bool success);
+    Task ScannerSkippedAsync(string scannerName, string reason);
+    Task ToolStartedAsync(string toolName, string? detail = null);
+    Task ToolCompletedAsync(string toolName, TimeSpan elapsed, string? detail = null, bool success = true);
+    Task AppendThinkingAsync(string token);
     Task StopAsync(AgentRunSummary summary, CancellationToken ct = default);
-    void WriteResponse(string text);
+    Task WriteResponseAsync(string text);
 }
 
 // ── Static Accessor ────────────────────────────────────────────────────
@@ -64,53 +65,113 @@ public static class AgentConsole
 /// <summary>Routes all output through Serilog. No Spectre rendering.</summary>
 public sealed class PlainAgentOutput : IAgentOutput
 {
+    private readonly List<ScannerTrace> _scanners = [];
+    private readonly Dictionary<string, ScannerTrace> _scannerWork = new(StringComparer.OrdinalIgnoreCase);
+    private string? _activeScanner;
+    private string _agentName = "Agent";
+
     public bool IsInteractive => false;
     public int ToolCallCount { get; private set; }
 
     public Task StartAsync(string agentName, CancellationToken ct = default)
     {
+        _agentName = agentName;
         Log.Information("Starting {AgentName}...", agentName);
         return Task.CompletedTask;
     }
 
-    public void UpdateStatus(string status)
-        => Log.Information("{Status}", status);
-
-    public void ScannerStarted(string scannerName, string modelName)
-        => Log.Information("Running: {ScannerName} [{Model}]", scannerName, modelName);
-
-    public void ScannerCompleted(string scannerName, TimeSpan elapsed, bool success)
+    public Task UpdateStatusAsync(string status)
     {
-        if (success)
-            Log.Information("Completed: {ScannerName} in {Elapsed:F1}s", scannerName, elapsed.TotalSeconds);
-        else
-            Log.Warning("Failed: {ScannerName} after {Elapsed:F1}s", scannerName, elapsed.TotalSeconds);
-    }
-
-    public void ToolStarted(string toolName, string? detail = null)
-    {
-        ToolCallCount++;
-        Log.Information("  {ToolName} {Detail}", toolName, detail ?? "");
-    }
-
-    public void ToolCompleted(string toolName, TimeSpan elapsed)
-        => Log.Debug("  {ToolName} completed in {Elapsed:F1}s", toolName, elapsed.TotalSeconds);
-
-    public void AppendThinking(string token) { } // silent in headless
-
-    public Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
-    {
-        Log.Information("Completed in {Duration:F1}s - {ToolCalls} tool calls, output: {Output}",
-            summary.Duration.TotalSeconds, summary.ToolCallCount, summary.OutputPath);
+        Log.Information("{Status}", status);
         return Task.CompletedTask;
     }
 
-    public void WriteResponse(string text)
+    public Task ScannerSkippedAsync(string scannerName, string reason)
     {
-        System.Console.WriteLine();
-        System.Console.WriteLine(text);
-        System.Console.WriteLine();
+        var trace = new ScannerTrace { Name = scannerName, ModelName = "—" };
+        trace.Elapsed = TimeSpan.Zero;
+        trace.Success = null;
+        trace.Response.Append(reason);
+        _scanners.Add(trace);
+        Log.Warning("Skipped: {ScannerName} — {Reason}", scannerName, reason);
+        return Task.CompletedTask;
     }
+
+    public Task ScannerStartedAsync(string scannerName, string modelName)
+    {
+        _activeScanner = scannerName;
+        if (!_scannerWork.ContainsKey(scannerName))
+        {
+            var trace = new ScannerTrace { Name = scannerName, ModelName = modelName };
+            _scannerWork[scannerName] = trace;
+            _scanners.Add(trace);
+        }
+
+        Log.Information("Running: {ScannerName} [{Model}]", scannerName, modelName);
+        return Task.CompletedTask;
+    }
+
+    public Task ScannerCompletedAsync(string scannerName, TimeSpan elapsed, bool success)
+    {
+        if (_scannerWork.TryGetValue(scannerName, out var work))
+        {
+            work.Elapsed = elapsed;
+            work.Success = success;
+        }
+
+        if (_activeScanner == scannerName)
+        {
+            _activeScanner = null;
+        }
+
+        if (success)
+        {
+            Log.Information("Completed: {ScannerName} in {Elapsed:F1}s", scannerName, elapsed.TotalSeconds);
+        }
+        else
+        {
+            Log.Warning("Failed: {ScannerName} after {Elapsed:F1}s", scannerName, elapsed.TotalSeconds);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task ToolStartedAsync(string toolName, string? detail = null)
+    {
+        ToolCallCount++;
+        Log.Information("  {ToolName} {Detail}", toolName, detail ?? "");
+        return Task.CompletedTask;
+    }
+
+    public Task ToolCompletedAsync(string toolName, TimeSpan elapsed, string? detail = null, bool success = true)
+    {
+        if (_activeScanner is not null && _scannerWork.TryGetValue(_activeScanner, out var work))
+        {
+            work.Tools.Add((toolName, detail, elapsed.TotalSeconds, success));
+        }
+
+        if (success)
+        {
+            Log.Debug("  {ToolName} completed in {Elapsed:F1}s", toolName, elapsed.TotalSeconds);
+        }
+        else
+        {
+            Log.Warning("  {ToolName} failed after {Elapsed:F1}s", toolName, elapsed.TotalSeconds);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task AppendThinkingAsync(string token) => Task.CompletedTask;
+
+    public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
+    {
+        Log.Information("Completed in {Duration:F1}s - {ToolCalls} tool calls, output: {Output}",
+            summary.Duration.TotalSeconds, summary.ToolCallCount, summary.OutputPath);
+        await AgentReasoningLog.WriteAsync(summary.FullOutputPath, _agentName, summary, _scanners);
+    }
+
+    public Task WriteResponseAsync(string text) => Task.CompletedTask;
 
     public void Dispose() { }
 }
@@ -123,21 +184,12 @@ public sealed class PlainAgentOutput : IAgentOutput
 /// </summary>
 public sealed class SpectreAgentOutput : IAgentOutput
 {
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     // Scanner tracking
-    private readonly List<string> _scannerOrder = [];
-    private readonly Dictionary<string, ScannerWork> _scannerWork = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ScannerTrace> _scannerOrder = [];
+    private readonly Dictionary<string, ScannerTrace> _scannerWork = new(StringComparer.OrdinalIgnoreCase);
     private string? _activeScanner;
-
-    private sealed class ScannerWork
-    {
-        public required string ModelName { get; init; }
-        public List<(string Tool, string? Detail, double Seconds)> Tools { get; } = [];
-        public StringBuilder Thinking { get; } = new();
-        public TimeSpan? Elapsed { get; set; }
-        public bool? Success { get; set; }
-    }
 
     private TaskCompletionSource? _stopSignal;
     private Task? _renderTask;
@@ -158,48 +210,74 @@ public sealed class SpectreAgentOutput : IAgentOutput
 
         _renderTask = Task.Run(async () =>
         {
-            await AnsiConsole.Live(BuildLayout())
+            await AnsiConsole.Live(await BuildLayoutAsync().ConfigureAwait(false))
                 .AutoClear(false)
                 .Overflow(VerticalOverflow.Ellipsis)
                 .StartAsync(async ctx =>
                 {
                     while (!_stopSignal.Task.IsCompleted)
                     {
-                        lock (_lock) { _spinnerFrame = (_spinnerFrame + 1) % Spinner.Length; }
-                        ctx.UpdateTarget(BuildLayout());
+                        if (await _lock.WaitAsync(0).ConfigureAwait(false))
+                        {
+                            try { _spinnerFrame = (_spinnerFrame + 1) % Spinner.Length; }
+                            finally { _lock.Release(); }
+                        }
+
+                        ctx.UpdateTarget(await BuildLayoutAsync().ConfigureAwait(false));
                         try { await Task.Delay(140, ct); }
                         catch (OperationCanceledException) { break; }
                     }
-                    ctx.UpdateTarget(BuildLayout());
+                    ctx.UpdateTarget(await BuildLayoutAsync().ConfigureAwait(false));
                 });
         }, ct);
 
         return Task.CompletedTask;
     }
 
-    public void UpdateStatus(string status)
+    public async Task UpdateStatusAsync(string status)
     {
-        lock (_lock) { _status = status; }
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try { _status = status; }
+        finally { _lock.Release(); }
     }
 
-    public void ScannerStarted(string scannerName, string modelName)
+    public async Task ScannerSkippedAsync(string scannerName, string reason)
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var trace = new ScannerTrace { Name = scannerName, ModelName = "—" };
+            trace.Elapsed = TimeSpan.Zero;
+            trace.Success = null;
+            trace.Response.Append(reason);
+            _scannerWork[scannerName] = trace;
+            _scannerOrder.Add(trace);
+        }
+        finally { _lock.Release(); }
+    }
+
+    public async Task ScannerStartedAsync(string scannerName, string modelName)
+    {
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
             _activeScanner = scannerName;
             _status = $"{scannerName}...";
 
             if (!_scannerWork.ContainsKey(scannerName))
             {
-                _scannerWork[scannerName] = new ScannerWork { ModelName = modelName };
-                _scannerOrder.Add(scannerName);
+                var trace = new ScannerTrace { Name = scannerName, ModelName = modelName };
+                _scannerWork[scannerName] = trace;
+                _scannerOrder.Add(trace);
             }
         }
+        finally { _lock.Release(); }
     }
 
-    public void ScannerCompleted(string scannerName, TimeSpan elapsed, bool success)
+    public async Task ScannerCompletedAsync(string scannerName, TimeSpan elapsed, bool success)
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_scannerWork.TryGetValue(scannerName, out var work))
             {
@@ -214,68 +292,94 @@ public sealed class SpectreAgentOutput : IAgentOutput
 
             _status = "Thinking...";
         }
+        finally { _lock.Release(); }
     }
 
-    public void ToolStarted(string toolName, string? detail = null)
+    public async Task ToolStartedAsync(string toolName, string? detail = null)
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
             ToolCallCount++;
-            _status = $"{toolName}...";
+            _status = detail is not null ? $"{toolName} ({detail})..." : $"{toolName}...";
         }
+        finally { _lock.Release(); }
     }
 
-    public void ToolCompleted(string toolName, TimeSpan elapsed)
+    public async Task ToolCompletedAsync(string toolName, TimeSpan elapsed, string? detail = null, bool success = true)
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            // Associate tool call with the active scanner
             if (_activeScanner is not null && _scannerWork.TryGetValue(_activeScanner, out var work))
             {
-                work.Tools.Add((toolName, null, elapsed.TotalSeconds));
+                work.Tools.Add((toolName, detail, elapsed.TotalSeconds, success));
             }
 
             _status = "Thinking...";
         }
+        finally { _lock.Release(); }
     }
 
-    public void AppendThinking(string token)
+    public async Task AppendThinkingAsync(string token)
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_activeScanner is not null && _scannerWork.TryGetValue(_activeScanner, out var work))
             {
                 work.Thinking.Append(token);
             }
         }
+        finally { _lock.Release(); }
     }
 
     public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
             _summary = summary;
             _status = "Done";
             _activeScanner = null;
         }
+        finally { _lock.Release(); }
 
         _stopSignal?.TrySetResult();
         if (_renderTask is not null)
         {
-            await _renderTask;
+            await _renderTask.ConfigureAwait(false);
         }
 
-        WriteReasoningFile(summary);
+        await AgentReasoningLog.WriteAsync(summary.FullOutputPath, _agentName, summary, _scannerOrder)
+            .ConfigureAwait(false);
     }
 
-    public void WriteResponse(string text) { }
-    public void Dispose() { _stopSignal?.TrySetResult(); }
+    public async Task WriteResponseAsync(string text)
+    {
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_activeScanner is not null && _scannerWork.TryGetValue(_activeScanner, out var work))
+            {
+                work.Response.Append(text);
+            }
+        }
+        finally { _lock.Release(); }
+    }
+
+    public void Dispose()
+    {
+        _stopSignal?.TrySetResult();
+        _lock.Dispose();
+    }
 
     // ── Layout ─────────────────────────────────────────────────────────
 
-    private IRenderable BuildLayout()
+    private async Task<IRenderable> BuildLayoutAsync()
     {
-        lock (_lock)
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
             var sections = new List<IRenderable>
             {
@@ -292,6 +396,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
 
             return new Rows(sections);
         }
+        finally { _lock.Release(); }
     }
 
     private IRenderable BuildHeader()
@@ -327,35 +432,62 @@ public sealed class SpectreAgentOutput : IAgentOutput
             .Guide(TreeGuide.BoldLine)
             .Style(new Style(AgentTheme.Dim));
 
-        foreach (var name in _scannerOrder)
+        foreach (var work in _scannerOrder)
         {
-            if (!_scannerWork.TryGetValue(name, out var work)) continue;
-
-            var isActive = _activeScanner == name && _summary is null;
+            var isActive = _activeScanner == work.Name && _summary is null;
             var isDone = work.Elapsed.HasValue;
 
-            // Icon: spinner (active), check (done+success), cross (done+failed), circle (pending)
+            var isSkipped = work.Success is null && work.Elapsed.HasValue;
+
+            // Icon: skip (⊘), spinner (active), check (done+success), cross (done+failed), circle (pending)
             string icon;
-            if (isActive)
+            if (isSkipped)
+            {
+                icon = $"[{AgentTheme.DimHex}]⊘[/]";
+            }
+            else if (isActive)
+            {
                 icon = $"[{AgentTheme.OrangeHex}]{Spinner[_spinnerFrame]}[/]";
+            }
             else if (isDone && work.Success == true)
+            {
                 icon = $"[{AgentTheme.GreenHex}]✓[/]";
+            }
             else if (isDone && work.Success == false)
+            {
                 icon = $"[{AgentTheme.RedHex}]✗[/]";
+            }
             else
+            {
                 icon = $"[{AgentTheme.DimHex}]○[/]";
+            }
 
-            var nameColor = isActive ? AgentTheme.CyanHex : (isDone ? AgentTheme.DimLightHex : AgentTheme.DimHex);
+            var nameColor = isSkipped ? AgentTheme.DimHex : (isActive ? AgentTheme.CyanHex : (isDone ? AgentTheme.DimLightHex : AgentTheme.DimHex));
             var modelShort = ShortenModelName(work.ModelName);
-            var elapsed = work.Elapsed.HasValue ? $" {work.Elapsed.Value.TotalSeconds:F1}s" : "";
+            var elapsed = work.Elapsed.HasValue && !isSkipped ? $" {work.Elapsed.Value.TotalSeconds:F1}s" : "";
 
+            var skipSuffix = isSkipped ? " [dim]skipped[/]" : "";
             var scannerNode = tree.AddNode(
-                $"{icon} [{nameColor} bold]{Markup.Escape(name)}[/] [{AgentTheme.DimHex}]{Markup.Escape(modelShort)}{elapsed}[/]");
+                $"{icon} [{nameColor} bold]{Markup.Escape(work.Name)}[/] [{AgentTheme.DimHex}]{Markup.Escape(modelShort)}{elapsed}[/]{skipSuffix}");
+
+            if (isSkipped)
+            {
+                var reason = work.Response.ToString().Trim();
+                if (reason.Length > 0)
+                {
+                    scannerNode.AddNode($"[{AgentTheme.DimHex}]{Markup.Escape(reason)}[/]");
+                }
+
+                continue;
+            }
 
             // Tool calls
-            foreach (var (tool, _, secs) in work.Tools)
+            foreach (var (tool, detail, secs, toolOk) in work.Tools)
             {
-                scannerNode.AddNode($"[{AgentTheme.DimHex}]{Markup.Escape(tool)} [{AgentTheme.DimLightHex}]{secs:F1}s[/][/]");
+                var color = toolOk ? AgentTheme.DimHex : AgentTheme.RedHex;
+                var statusIcon = toolOk ? "" : " ✗";
+                var detailText = detail is not null ? $" [{AgentTheme.DimLightHex}]{Markup.Escape(detail)}[/]" : "";
+                scannerNode.AddNode($"[{color}]{Markup.Escape(tool)}{detailText} [{AgentTheme.DimLightHex}]{secs:F1}s[/]{statusIcon}[/]");
             }
 
             // Active scanner thinking preview (last 2 lines)
@@ -447,67 +579,4 @@ public sealed class SpectreAgentOutput : IAgentOutput
         return name.Length > 20 ? name[..20] + "..." : name;
     }
 
-    /// <summary>Writes reasoning trace organized by scanner.</summary>
-    private void WriteReasoningFile(AgentRunSummary summary)
-    {
-        try
-        {
-            var outputDir = Path.GetDirectoryName(summary.FullOutputPath);
-            var reasoningPath = Path.Combine(outputDir ?? ".", "REASONING.md");
-
-            var sb = new StringBuilder();
-            sb.AppendLine("# Reasoning Trace");
-            sb.AppendLine();
-            sb.AppendLine($"> Agent: {_agentName}");
-            sb.AppendLine($"> Duration: {summary.Duration.TotalSeconds:F1}s");
-            sb.AppendLine($"> Tools: {summary.ToolCallCount} calls");
-            sb.AppendLine($"> Status: {(summary.Success ? "Success" : "Failed")}");
-            sb.AppendLine();
-
-            foreach (var name in _scannerOrder)
-            {
-                if (!_scannerWork.TryGetValue(name, out var work)) continue;
-
-                var status = work.Success switch
-                {
-                    true => "Success",
-                    false => "Failed",
-                    null => "Pending",
-                };
-                var elapsed = work.Elapsed.HasValue ? $"{work.Elapsed.Value.TotalSeconds:F1}s" : "-";
-
-                sb.AppendLine($"## {name}");
-                sb.AppendLine();
-                sb.AppendLine($"- **Model:** {work.ModelName}");
-                sb.AppendLine($"- **Duration:** {elapsed}");
-                sb.AppendLine($"- **Status:** {status}");
-                sb.AppendLine($"- **Tool calls:** {work.Tools.Count}");
-                sb.AppendLine();
-
-                if (work.Tools.Count > 0)
-                {
-                    foreach (var (tool, _, secs) in work.Tools)
-                    {
-                        sb.AppendLine($"  - {tool} ({secs:F1}s)");
-                    }
-                    sb.AppendLine();
-                }
-
-                var thinking = work.Thinking.ToString().Trim();
-                if (thinking.Length > 0)
-                {
-                    sb.AppendLine("### Thinking");
-                    sb.AppendLine();
-                    sb.AppendLine(thinking);
-                    sb.AppendLine();
-                }
-            }
-
-            File.WriteAllText(reasoningPath, sb.ToString());
-        }
-        catch
-        {
-            // Best effort
-        }
-    }
 }

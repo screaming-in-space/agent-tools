@@ -31,44 +31,118 @@ public sealed class ToolProgressWrapper : AIFunction
         var detail = ExtractDetail(arguments);
         var friendly = FriendlyName(_inner.Name);
 
-        _output.ToolStarted(friendly, detail);
+        await _output.ToolStartedAsync(friendly, detail);
         var sw = Stopwatch.StartNew();
+
+        // Yield to ensure the "Tool started" message is rendered before any potential hot loop/long-running tool execution.
+        await Task.Yield();
 
         try
         {
-            return await _inner.InvokeAsync(arguments, cancellationToken);
+            var result = await _inner.InvokeAsync(arguments, cancellationToken);
+            sw.Stop();
+
+            var resultStr = result?.ToString() ?? "";
+            var isError = resultStr.StartsWith("Error:", StringComparison.OrdinalIgnoreCase);
+            await _output.ToolCompletedAsync(friendly, sw.Elapsed, detail, success: !isError);
+
+            if (isError)
+            {
+                await AgentErrorLog.LogAsync(friendly, $"{detail ?? _inner.Name}: {resultStr}");
+            }
+
+            return result;
         }
-        finally
+        catch (Exception ex)
         {
             sw.Stop();
-            _output.ToolCompleted(friendly, sw.Elapsed);
+            await _output.ToolCompletedAsync(friendly, sw.Elapsed, detail, success: false);
+            await AgentErrorLog.LogAsync(friendly, $"{detail ?? _inner.Name}: exception", ex);
+            throw;
         }
     }
 
+    private static ReadOnlySpan<string> PrimaryFileKeys => new[] { "filePath", "directoryPath", "path" };
+    private static ReadOnlySpan<string> PrimaryGitKeys => new[] { "commitSha", "date", "language" };
+    private static ReadOnlySpan<string> SecondaryContextKeys => new[] { "commitSha", "date" };
+
+    private static readonly Dictionary<string, string> FriendlyNames = new(StringComparer.Ordinal)
+    {
+        // FileTools
+        ["ListMarkdownFiles"] = "Listing files",
+        ["ReadFileContent"] = "Reading file",
+        ["ExtractStructure"] = "Extracting structure",
+        ["WriteOutput"] = "Writing output",
+        // CodeCommentTools
+        ["ListSourceFiles"] = "Listing source files",
+        ["ExtractComments"] = "Extracting comments",
+        ["ExtractCodePatterns"] = "Scanning patterns",
+        // StructureTools
+        ["ListProjects"] = "Listing projects",
+        ["ReadProjectFile"] = "Reading project",
+        ["MapDependencyGraph"] = "Mapping dependencies",
+        ["DetectArchitecturePattern"] = "Classifying architecture",
+        // QualityTools
+        ["AnalyzeCSharpFile"] = "Analyzing C# file",
+        ["AnalyzeCSharpProject"] = "Analyzing project quality",
+        ["AnalyzeSourceFile"] = "Analyzing source file",
+        ["CheckEditorConfig"] = "Checking editorconfig",
+        // GitTools
+        ["GetGitLog"] = "Reading git log",
+        ["GetGitDiff"] = "Reading git diff",
+        ["GetGitStats"] = "Computing git stats",
+        ["CheckJournalExists"] = "Checking journal",
+    };
+
     private static string? ExtractDetail(AIFunctionArguments arguments)
     {
-        foreach (var key in (ReadOnlySpan<string>)["filePath", "directoryPath", "path"])
+        // Primary: extract file/directory path and make it relative
+        foreach (var key in PrimaryFileKeys)
         {
             if (arguments.TryGetValue(key, out var value) && ExtractString(value) is { Length: > 0 } s)
             {
-                // Make path relative to RootDirectory for tree display
-                var root = Agent.SDK.Tools.FileTools.RootDirectory;
+                var root = Tools.FileTools.RootDirectory;
                 if (root.Length > 0)
                 {
-                    var resolved = Agent.SDK.Tools.FileTools.ResolveSafePath(s);
+                    var resolved = Tools.FileTools.ResolveSafePath(s);
                     if (resolved is not null)
                     {
                         var relative = Path.GetRelativePath(root, resolved).Replace('\\', '/');
-                        // Don't return "." for directory-level tools
-                        return relative == "." ? null : relative;
+                        if (relative != ".")
+                        {
+                            return AppendSecondaryDetail(relative, arguments);
+                        }
                     }
                 }
 
-                return s.Replace('\\', '/');
+                var pathDetail = s.Replace('\\', '/');
+                return AppendSecondaryDetail(pathDetail, arguments);
+            }
+        }
+
+        // Fallback: if no path found, try secondary params alone
+        foreach (var key in PrimaryGitKeys)
+        {
+            if (arguments.TryGetValue(key, out var value) && ExtractString(value) is { Length: > 0 } s)
+            {
+                return s;
             }
         }
 
         return null;
+    }
+
+    private static string AppendSecondaryDetail(string primary, AIFunctionArguments arguments)
+    {
+        foreach (var key in SecondaryContextKeys)
+        {
+            if (arguments.TryGetValue(key, out var value) && ExtractString(value) is { Length: > 0 } s)
+            {
+                return $"{primary} ({s})";
+            }
+        }
+
+        return primary;
     }
 
     private static string? ExtractString(object? value) => value switch
@@ -78,34 +152,8 @@ public sealed class ToolProgressWrapper : AIFunction
         _ => value?.ToString()
     };
 
-    private static string FriendlyName(string functionName) => functionName switch
-    {
-        // FileTools
-        "ListMarkdownFiles" => "Listing files",
-        "ReadFileContent" => "Reading file",
-        "ExtractStructure" => "Extracting structure",
-        "WriteOutput" => "Writing output",
-        // CodeCommentTools
-        "ListSourceFiles" => "Listing source files",
-        "ExtractComments" => "Extracting comments",
-        "ExtractCodePatterns" => "Scanning patterns",
-        // StructureTools
-        "ListProjects" => "Listing projects",
-        "ReadProjectFile" => "Reading project",
-        "MapDependencyGraph" => "Mapping dependencies",
-        "DetectArchitecturePattern" => "Classifying architecture",
-        // QualityTools
-        "AnalyzeCSharpFile" => "Analyzing C# file",
-        "AnalyzeCSharpProject" => "Analyzing project quality",
-        "AnalyzeSourceFile" => "Analyzing source file",
-        "CheckEditorConfig" => "Checking editorconfig",
-        // GitTools
-        "GetGitLog" => "Reading git log",
-        "GetGitDiff" => "Reading git diff",
-        "GetGitStats" => "Computing git stats",
-        "CheckJournalExists" => "Checking journal",
-        _ => functionName
-    };
+    private static string FriendlyName(string functionName)
+        => FriendlyNames.GetValueOrDefault(functionName, functionName);
 }
 
 /// <summary>
@@ -115,10 +163,6 @@ public static class ToolProgressExtensions
 {
     /// <summary>
     /// Wraps each <see cref="AIFunction"/> in the list with progress reporting.
-    /// In headless mode, returns the original list unchanged.
-    /// </summary>
-    /// <summary>
-    /// Wraps each <see cref="AIFunction"/> in the list with progress reporting.
     /// Always wraps regardless of interactive/headless mode so that tool call
     /// counting works in both modes.
     /// </summary>
@@ -126,6 +170,6 @@ public static class ToolProgressExtensions
     {
         return tools.Select(tool => tool is AIFunction func
             ? new ToolProgressWrapper(func, output)
-            : tool).ToList<AITool>();
+            : tool).ToList();
     }
 }

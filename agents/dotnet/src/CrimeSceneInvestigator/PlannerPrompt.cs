@@ -66,6 +66,7 @@ public static class PlannerPrompt
             - If a configured model's `model` field matches (or is contained in) a loaded model ID, it's available.
             - If only one model is available for all scanners, assign it to everything.
             - Prefer faster/smaller models when they can handle the complexity — don't over-allocate.
+            - If no loaded model can reasonably handle a **heavy** scanner (e.g., only tiny models available), assign `"skip"` instead of a config key. The scanner will be skipped gracefully.
 
             ## Loaded Models (currently in VRAM)
 

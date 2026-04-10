@@ -79,5 +79,8 @@ public static class QualityPrompt
           God classes (>500 lines), high cyclomatic complexity (>10), magic numbers.
         - Recommendations should be specific and actionable, not generic advice.
         - If .editorconfig exists, violations against it are HIGH severity.
+        - CRITICAL: Your final action MUST be calling `WriteOutput` with the output path and content.
+          Do NOT describe the output in text. Do NOT say "here is the result". CALL the tool.
+          If you do not call WriteOutput, your work is lost.
         """;
 }

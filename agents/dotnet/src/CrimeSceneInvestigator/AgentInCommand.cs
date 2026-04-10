@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Agent.SDK.Configuration;
@@ -10,7 +11,6 @@ using CrimeSceneInvestigator.Telemetry;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Serilog;
 
 namespace CrimeSceneInvestigator;
 
@@ -32,7 +32,12 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             return exitCode;
         }
 
+        using var _ = context;
+
         var output = AgentConsole.Output;
+        var contextDir = Path.Combine(context.TargetPath, "context");
+        await AgentErrorLog.InitAsync(contextDir);
+        await AgentDebugLog.InitAsync(contextDir);
         var stopwatch = Stopwatch.StartNew();
 
         await output.StartAsync("Crime Scene Investigator", ct);
@@ -45,7 +50,6 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             // ── Plan model assignments ─────────────────────────────────────
 
             var scanOptions = context.ScanOptions;
-            var contextDir = Path.Combine(context.TargetPath, "context");
 
             var modelPlan = await PlanScannerModelsAsync(context, scanOptions, loadedModels, ct);
 
@@ -62,7 +66,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                         AIFunctionFactory.Create(FileTools.ExtractStructure),
                         AIFunctionFactory.Create(FileTools.WriteOutput),
                     ], ct, expectedOutputPath: context.OutputPath,
-                    modelOverride: modelPlan.GetValueOrDefault("markdown"));
+                    modelOverride: modelPlan.GetValueOrDefault("markdown"),
+                    timeout: TimeSpan.FromMinutes(2));
             }
 
             if (scanOptions.ScanCodeComments)
@@ -78,7 +83,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                         AIFunctionFactory.Create(FileTools.ReadFileContent),
                         AIFunctionFactory.Create(FileTools.WriteOutput),
                     ], ct, expectedOutputPath: rulesPath,
-                    modelOverride: modelPlan.GetValueOrDefault("rules"));
+                    modelOverride: modelPlan.GetValueOrDefault("rules"),
+                    timeout: TimeSpan.FromMinutes(4));
             }
 
             if (scanOptions.ScanCodePattern)
@@ -94,7 +100,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                         AIFunctionFactory.Create(StructureTools.DetectArchitecturePattern),
                         AIFunctionFactory.Create(FileTools.WriteOutput),
                     ], ct, expectedOutputPath: structurePath,
-                    modelOverride: modelPlan.GetValueOrDefault("structure"));
+                    modelOverride: modelPlan.GetValueOrDefault("structure"),
+                    timeout: TimeSpan.FromMinutes(3));
 
                 var qualityPath = Path.Combine(contextDir, "QUALITY.md");
                 await RunScannerAsync(context, "Quality Scanner",
@@ -110,7 +117,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                         AIFunctionFactory.Create(FileTools.ReadFileContent),
                         AIFunctionFactory.Create(FileTools.WriteOutput),
                     ], ct, expectedOutputPath: qualityPath,
-                    modelOverride: modelPlan.GetValueOrDefault("quality"));
+                    modelOverride: modelPlan.GetValueOrDefault("quality"),
+                    timeout: TimeSpan.FromMinutes(4));
             }
 
             if (scanOptions.ScanGitHistory)
@@ -126,7 +134,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                         AIFunctionFactory.Create(GitTools.CheckJournalExists),
                         AIFunctionFactory.Create(FileTools.WriteOutput),
                     ], ct, expectedOutputPath: journalPath,
-                    modelOverride: modelPlan.GetValueOrDefault("journal"));
+                    modelOverride: modelPlan.GetValueOrDefault("journal"),
+                    timeout: TimeSpan.FromMinutes(3));
             }
 
             // DONE.md always runs last — aggregates all prior scanner results
@@ -141,7 +150,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                     AIFunctionFactory.Create(FileTools.ReadFileContent),
                     AIFunctionFactory.Create(FileTools.WriteOutput),
                 ], ct, expectedOutputPath: donePath,
-                modelOverride: modelPlan.GetValueOrDefault("done"));
+                modelOverride: modelPlan.GetValueOrDefault("done"),
+                timeout: TimeSpan.FromMinutes(3));
 
             stopwatch.Stop();
             CsiMetrics.RunDuration.Record(stopwatch.Elapsed.TotalSeconds);
@@ -155,12 +165,17 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
                 FullOutputPath: contextDir,
                 Success: true), ct);
 
+            await AgentDebugLog.CloseAsync();
+            await AgentErrorLog.CloseAsync();
             return 0;
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             span?.RecordError(ex);
+            await AgentErrorLog.LogAsync("Agent", $"Run failed: {ex.Message}", ex);
+            await AgentDebugLog.CloseAsync();
+            await AgentErrorLog.CloseAsync();
 
             await output.StopAsync(new AgentRunSummary(
                 ToolCallCount: output.ToolCallCount,
@@ -214,7 +229,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         if (scanOptions.ScanGitHistory) enabledScanners.Add("journal");
         enabledScanners.Add("done"); // always runs
 
-        output.ScannerStarted("Planner", context.ModelOptions.Model);
+        await output.ScannerStartedAsync("Planner", context.ModelOptions.Model);
         Logger.LogInformation("Running planner with {ModelCount} available models: {Models}",
             availableConfigs.Count, string.Join(", ", availableConfigs.Keys));
         var plannerSw = Stopwatch.StartNew();
@@ -223,7 +238,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         {
             var systemPrompt = PlannerPrompt.Build(enabledScanners, loadedModels, availableConfigs);
 
-            IChatClient agent = await context.GetAgentClientAsync();
+            var agent = context.GetAgentClient();
             var messages = new List<ChatMessage>
             {
                 new(ChatRole.System, systemPrompt),
@@ -236,16 +251,17 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             if (context.ModelOptions.MaxOutputTokens.HasValue)
                 chatOptions.MaxOutputTokens = context.ModelOptions.MaxOutputTokens;
 
-            string? responseText = null;
+            var plannerBuf = new StringBuilder();
             await foreach (var update in agent.GetStreamingResponseAsync(messages, chatOptions, ct))
             {
                 if (update.Text is { Length: > 0 } text)
                 {
-                    responseText = (responseText ?? "") + text;
+                    plannerBuf.Append(text);
                 }
             }
 
-            if (responseText is null or { Length: 0 })
+            var responseText = plannerBuf.ToString();
+            if (responseText.Length == 0)
             {
                 Logger.LogWarning("Planner returned empty response, using default model for all scanners");
                 return [];
@@ -255,7 +271,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             var plan = ParsePlannerResponse(responseText, allConfigs);
 
             plannerSw.Stop();
-            output.ScannerCompleted("Planner", plannerSw.Elapsed, success: true);
+            await output.ScannerCompletedAsync("Planner", plannerSw.Elapsed, success: true);
 
             foreach (var (scanner, options) in plan)
             {
@@ -267,7 +283,7 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         catch (Exception ex)
         {
             plannerSw.Stop();
-            output.ScannerCompleted("Planner", plannerSw.Elapsed, success: false);
+            await output.ScannerCompletedAsync("Planner", plannerSw.Elapsed, success: false);
             Logger.LogError(ex, "Planner failed, using default model for all scanners");
             return [];
         }
@@ -281,18 +297,33 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
     {
         var result = new Dictionary<string, AgentModelOptions>(StringComparer.OrdinalIgnoreCase);
 
-        // Extract JSON from markdown code fences or raw text
-        var jsonMatch = Regex.Match(response, @"\{[^}]+\}", RegexOptions.Singleline);
-        if (!jsonMatch.Success) return result;
+        var cleaned = Regex.Replace(response, @"```(?:json)?", "").Trim();
+        var start = cleaned.IndexOf('{');
+        if (start < 0) { return result; }
+
+        var depth = 0;
+        var end = -1;
+        for (var i = start; i < cleaned.Length; i++)
+        {
+            if (cleaned[i] == '{') { depth++; }
+            else if (cleaned[i] == '}') { depth--; if (depth == 0) { end = i; break; } }
+        }
+
+        if (end < 0) { return result; }
+        var jsonMatch = cleaned.AsSpan(start, end - start + 1);
 
         try
         {
-            var assignments = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonMatch.Value);
+            var assignments = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonMatch);
             if (assignments is null) return result;
 
             foreach (var (scanner, configKey) in assignments)
             {
-                if (allConfigs.TryGetValue(configKey, out var options))
+                if (string.Equals(configKey, "skip", StringComparison.OrdinalIgnoreCase))
+                {
+                    result[scanner] = AgentModelOptions.Skipped;
+                }
+                else if (allConfigs.TryGetValue(configKey, out var options))
                 {
                     result[scanner] = options;
                 }
@@ -309,9 +340,8 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
     // ── Scanner runner ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Runs a single scanner: one LLM call with its own system prompt and tool set.
-    /// If the model produces text output but doesn't call WriteOutput, the text is
-    /// saved to <paramref name="expectedOutputPath"/> as a fallback.
+    /// Runs a single scanner with timeout and one retry. If the model produces text
+    /// output but doesn't call WriteOutput, substantive markdown is saved as a fallback.
     /// </summary>
     private async Task RunScannerAsync(
         AgentContext context,
@@ -321,16 +351,27 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         IList<AITool> tools,
         CancellationToken ct,
         string? expectedOutputPath = null,
-        AgentModelOptions? modelOverride = null)
+        AgentModelOptions? modelOverride = null,
+        TimeSpan? timeout = null)
     {
         var output = AgentConsole.Output;
+
+        if (modelOverride?.IsSkipped == true)
+        {
+            var reason = "No loaded model meets capability requirements for this scanner";
+            await output.ScannerSkippedAsync(scannerName, reason);
+            Logger.LogWarning("Skipping scanner {ScannerName}: {Reason}", scannerName, reason);
+            await AgentErrorLog.LogAsync(scannerName, $"Skipped: {reason}");
+            return;
+        }
+
         var activeModel = modelOverride ?? context.ModelOptions;
         var sw = Stopwatch.StartNew();
 
-        output.ScannerStarted(scannerName, activeModel.Model);
+        await output.ScannerStartedAsync(scannerName, activeModel.Model);
         Logger.LogInformation("Starting scanner: {ScannerName} with model {Model}", scannerName, activeModel.Model);
 
-        IChatClient agent = await context.GetAgentClientAsync(modelOverride);
+        var agent = context.GetAgentClient(modelOverride);
 
         var chatOptions = new ChatOptions
         {
@@ -352,64 +393,114 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
             chatOptions.MaxOutputTokens = activeModel.MaxOutputTokens;
         }
 
-        var messages = new List<ChatMessage>
+        var effectiveTimeout = timeout ?? TimeSpan.FromMinutes(3);
+        const int maxAttempts = 2;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            new(ChatRole.System, systemPrompt),
-            new(ChatRole.User, userMessage),
-        };
-
-        try
-        {
-            string? responseText = null;
-            await foreach (var update in agent.GetStreamingResponseAsync(messages, chatOptions, ct))
+            var messages = new List<ChatMessage>
             {
-                if (update.Text is { Length: > 0 } text)
-                {
-                    responseText = (responseText ?? "") + text;
-                }
-            }
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, attempt > 1
+                    ? $"{userMessage}\n\nPrevious attempt failed to produce output. Focus on calling WriteOutput with valid markdown content."
+                    : userMessage),
+            };
 
-            if (responseText is { Length: > 0 })
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(effectiveTimeout);
+            var scannerCt = timeoutCts.Token;
+
+            try
             {
-                var preview = responseText.Length > 200 ? responseText[..200] + "..." : responseText;
-                Logger.LogInformation("Scanner {ScannerName} response: {Preview}", scannerName, preview);
-
-                // Fallback: if the model produced markdown output as text but didn't
-                // call WriteOutput, save it to the expected path automatically.
-                if (expectedOutputPath is not null && !File.Exists(expectedOutputPath))
+                var responseBuf = new StringBuilder();
+                await foreach (var update in agent.GetStreamingResponseAsync(messages, chatOptions, scannerCt))
                 {
-                    var trimmed = responseText.TrimStart();
-                    // Accept any substantive markdown content (headers, lists, text)
-                    if (trimmed.Length > 50)
+                    if (update.Text is { Length: > 0 } text)
                     {
-                        var dir = Path.GetDirectoryName(expectedOutputPath);
-                        if (dir is not null && !Directory.Exists(dir))
-                        {
-                            Directory.CreateDirectory(dir);
-                        }
-
-                        File.WriteAllText(expectedOutputPath, trimmed);
-                        Logger.LogInformation("Fallback write: saved {ScannerName} output to {Path}",
-                            scannerName, expectedOutputPath);
+                        responseBuf.Append(text);
                     }
                 }
+
+                var responseText = responseBuf.ToString();
+                if (responseText.Length > 0)
+                {
+                    var preview = responseText.Length > 200 ? responseText[..200] + "..." : responseText;
+                    Logger.LogInformation("Scanner {ScannerName} response: {Preview}", scannerName, preview);
+
+                    // Fallback: if the model produced markdown as text but didn't call WriteOutput.
+                    if (expectedOutputPath is not null && !File.Exists(expectedOutputPath))
+                    {
+                        var trimmed = responseText.TrimStart();
+                        if (IsSubstantiveMarkdown(trimmed))
+                        {
+                            var dir = Path.GetDirectoryName(expectedOutputPath);
+                            if (dir is not null && !Directory.Exists(dir))
+                            {
+                                Directory.CreateDirectory(dir);
+                            }
+
+                            File.WriteAllText(expectedOutputPath, trimmed);
+                            Logger.LogInformation("Fallback write: saved {ScannerName} output to {Path}",
+                                scannerName, expectedOutputPath);
+                        }
+                        else
+                        {
+                            var rejected = trimmed.Length > 100 ? trimmed[..100] + "..." : trimmed;
+                            Logger.LogWarning("Scanner {ScannerName} fallback rejected — not markdown: {Preview}",
+                                scannerName, rejected);
+                            await AgentErrorLog.LogAsync(scannerName, $"Fallback rejected — model produced chatbot filler: {rejected}");
+                        }
+                    }
+                }
+                else
+                {
+                    Logger.LogWarning("Scanner {ScannerName} produced no text response", scannerName);
+                }
+
+                // Retry if output file still missing and we have attempts left
+                if (expectedOutputPath is not null && !File.Exists(expectedOutputPath) && attempt < maxAttempts)
+                {
+                    Logger.LogWarning("Scanner {ScannerName} produced no output — retrying (attempt {Attempt}/{Max})",
+                        scannerName, attempt, maxAttempts);
+                    continue;
+                }
+
+                if (expectedOutputPath is not null && !File.Exists(expectedOutputPath))
+                {
+                    Logger.LogError("Scanner {ScannerName} produced no output file at {Path}",
+                        scannerName, expectedOutputPath);
+                    await AgentErrorLog.LogAsync(scannerName, $"No output file produced at {expectedOutputPath}");
+                }
+
+                break;
             }
-            else
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                Logger.LogWarning("Scanner {ScannerName} produced no text response", scannerName);
+                Logger.LogWarning("Scanner {ScannerName} timed out after {Timeout}", scannerName, effectiveTimeout);
+                await AgentErrorLog.LogAsync(scannerName, $"Timed out after {effectiveTimeout}");
+                if (attempt < maxAttempts)
+                {
+                    Logger.LogInformation("Retrying scanner {ScannerName} (attempt {Attempt}/{Max})",
+                        scannerName, attempt + 1, maxAttempts);
+                    continue;
+                }
+
+                sw.Stop();
+                await output.ScannerCompletedAsync(scannerName, sw.Elapsed, success: false);
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            sw.Stop();
-            output.ScannerCompleted(scannerName, sw.Elapsed, success: false);
-            Logger.LogError(ex, "Scanner {ScannerName} failed: {Message}", scannerName, ex.Message);
-            // Continue to next scanner — don't abort the whole run
-            return;
+            catch (Exception ex)
+            {
+                sw.Stop();
+                await output.ScannerCompletedAsync(scannerName, sw.Elapsed, success: false);
+                Logger.LogError(ex, "Scanner {ScannerName} failed: {Message}", scannerName, ex.Message);
+                await AgentErrorLog.LogAsync(scannerName, $"Failed: {ex.Message}", ex);
+                return;
+            }
         }
 
         sw.Stop();
-        output.ScannerCompleted(scannerName, sw.Elapsed, success: true);
+        await output.ScannerCompletedAsync(scannerName, sw.Elapsed, success: true);
         Logger.LogInformation("Completed scanner: {ScannerName} in {Elapsed:F1}s", scannerName, sw.Elapsed.TotalSeconds);
     }
 
@@ -434,7 +525,14 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         }
 
         var configKey = parseResult.GetValue(AgentCommandSetup.ConfigKeyOption);
+        var modelOverride = parseResult.GetValue(AgentCommandSetup.ModelOverrideOption);
         var modelOptions = AgentModelOptions.Resolve(Configuration, configKey);
+
+        // --model overrides the model name from config, keeping the same endpoint/key
+        if (!string.IsNullOrWhiteSpace(modelOverride))
+        {
+            modelOptions = modelOptions with { Model = modelOverride };
+        }
 
         var outputPath = parseResult.GetValue(AgentCommandSetup.OutputOption)
             ?? Path.Combine(targetPath, "context", "MAP.md");
@@ -447,11 +545,11 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
         var output = AgentConsole.Output;
         var modelDisplay = string.IsNullOrEmpty(modelOptions.Model) ? "(server default)" : modelOptions.Model;
 
-        output.UpdateStatus($"Target: {targetPath}");
-        output.UpdateStatus($"Config: Models:{configKey ?? AgentModelOptions.DefaultKey}");
-        output.UpdateStatus($"Endpoint: {modelOptions.Endpoint}");
-        output.UpdateStatus($"Model: {modelDisplay}");
-        output.UpdateStatus($"Output: {outputPath}");
+        await output.UpdateStatusAsync($"Target: {targetPath}");
+        await output.UpdateStatusAsync($"Config: Models:{configKey ?? AgentModelOptions.DefaultKey}");
+        await output.UpdateStatusAsync($"Endpoint: {modelOptions.Endpoint}");
+        await output.UpdateStatusAsync($"Model: {modelDisplay}");
+        await output.UpdateStatusAsync($"Output: {outputPath}");
 
         // ── Validate endpoint + model ───────────────────────────────────
 
@@ -459,15 +557,15 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
 
         if (!health.IsHealthy)
         {
-            output.UpdateStatus($"Endpoint health check failed: {health.Error}");
+            await output.UpdateStatusAsync($"Endpoint health check failed: {health.Error}");
             return (1, null, []);
         }
 
-        output.UpdateStatus($"Endpoint healthy - {health.LoadedModels.Count} model(s) loaded");
+        await output.UpdateStatusAsync($"Endpoint healthy - {health.LoadedModels.Count} model(s) loaded");
 
         if (!health.IsModelLoaded)
         {
-            output.UpdateStatus($"Model not loaded: {health.Error}");
+            await output.UpdateStatusAsync($"Model not loaded: {health.Error}");
             return (1, null, []);
         }
 
@@ -477,5 +575,48 @@ public record AgentInCommand(ILogger<AgentInCommand> Logger, IConfiguration Conf
 
         var ctx = new AgentContext(targetPath, outputPath, modelOptions, [], scanOptions);
         return (0, ctx, health.LoadedModels);
+    }
+
+    // ── Fallback validation ────────────────────────────────────────────
+
+    private static readonly string[] ChatbotPreambles =
+        ["I'm", "I am", "Sure", "Here's", "Let me", "Hello", "I can", "I'd be", "How can", "Of course"];
+
+    /// <summary>
+    /// Returns <c>true</c> when the content looks like real scanner output
+    /// (has markdown structure) rather than a generic chatbot response.
+    /// </summary>
+    public static bool IsSubstantiveMarkdown(string content)
+    {
+        if (content.Length < 50)
+        {
+            return false;
+        }
+
+        var hasMarkdownStructure = content.Contains('#')
+            || content.Contains("- ")
+            || content.Contains("| ");
+
+        if (!hasMarkdownStructure)
+        {
+            return false;
+        }
+
+        var firstLine = content.AsSpan();
+        var newline = firstLine.IndexOfAny('\r', '\n');
+        if (newline > 0)
+        {
+            firstLine = firstLine[..newline];
+        }
+
+        foreach (var preamble in ChatbotPreambles)
+        {
+            if (firstLine.StartsWith(preamble, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

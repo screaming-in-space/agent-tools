@@ -78,5 +78,8 @@ public static class JournalPrompt
         - Group related commits into coherent narratives.
         - Keep entries concise: 100-200 words per day.
         - Date format is always YYYY-MM-DD_00.md (the _00 suffix allows multiple entries per day).
+        - CRITICAL: Your final action MUST be calling `WriteOutput` with the output path and content.
+          Do NOT describe the output in text. Do NOT say "here is the result". CALL the tool.
+          If you do not call WriteOutput, your work is lost.
         """;
 }

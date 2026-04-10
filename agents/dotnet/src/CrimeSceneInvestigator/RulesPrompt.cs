@@ -96,5 +96,8 @@ public static class RulesPrompt
         - If comments explicitly warn against something, include it in Rejected Patterns.
         - Stack versions come from .csproj PackageReference and TargetFramework.
         - Keep the output concise and actionable. No filler.
+        - CRITICAL: Your final action MUST be calling `WriteOutput` with the output path and content.
+          Do NOT describe the output in text. Do NOT say "here is the result". CALL the tool.
+          If you do not call WriteOutput, your work is lost.
         """;
 }

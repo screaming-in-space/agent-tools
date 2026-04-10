@@ -18,6 +18,15 @@ public sealed record AgentModelOptions
     /// <summary>The config key used when <c>--config-key</c> is not specified.</summary>
     public const string DefaultKey = "default";
 
+    /// <summary>
+    /// Sentinel value indicating the planner decided to skip this scanner
+    /// because no loaded model meets its capability requirements.
+    /// </summary>
+    public static readonly AgentModelOptions Skipped = new() { Model = "__skipped__" };
+
+    /// <summary>Returns <c>true</c> if this is the <see cref="Skipped"/> sentinel.</summary>
+    public bool IsSkipped => ReferenceEquals(this, Skipped);
+
     /// <summary>OpenAI-compatible endpoint URL.</summary>
     public string Endpoint { get; init; } = "http://localhost:1234/v1";
 

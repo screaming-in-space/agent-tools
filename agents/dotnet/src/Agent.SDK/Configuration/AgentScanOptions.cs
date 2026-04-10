@@ -36,8 +36,8 @@ public sealed record AgentScanOptions
 
     /// <summary>
     /// Creates scan options from a comma-separated CLI override string.
-    /// Valid tokens: <c>markdown</c>, <c>comments</c>, <c>structure</c>, <c>quality</c>,
-    /// <c>journal</c>, <c>done</c>. Only listed scanners are enabled; all others disabled.
+    /// Valid tokens: <c>markdown</c>, <c>comments</c> (or <c>rules</c>), <c>structure</c>,
+    /// <c>quality</c>, <c>journal</c>, <c>done</c>. Only listed scanners are enabled; all others disabled.
     /// Returns <c>null</c> if the override string is null or empty (use config defaults).
     /// </summary>
     public static AgentScanOptions? FromCliOverride(string? scanOverride)
@@ -55,7 +55,7 @@ public sealed record AgentScanOptions
         return new AgentScanOptions
         {
             ScanMarkdown = tokens.Contains("markdown"),
-            ScanCodeComments = tokens.Contains("comments"),
+            ScanCodeComments = tokens.Contains("comments") || tokens.Contains("rules"),
             ScanCodePattern = tokens.Contains("structure") || tokens.Contains("quality"),
             ScanGitHistory = tokens.Contains("journal"),
         };

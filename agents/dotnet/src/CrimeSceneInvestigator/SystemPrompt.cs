@@ -85,5 +85,8 @@ public static class SystemPrompt
         - Do NOT include a "Rules" section in your output.
         - If there are more than 50 files, include all in the File Index but group
           less important ones with a brief note. Read a representative sample.
+        - CRITICAL: Your final action MUST be calling `WriteOutput` with the output path and content.
+          Do NOT describe the output in text. Do NOT say "here is the result". CALL the tool.
+          If you do not call WriteOutput, your work is lost.
         """;
 }

@@ -31,7 +31,12 @@ public static class AgentCommandSetup
 
     public static readonly Option<string?> ScanOption = new("--scan")
     {
-        Description = "Comma-separated scanners to run: markdown,comments,structure,journal (default: all enabled in config)"
+        Description = "Comma-separated scanners to run: markdown,comments|rules,structure,quality,journal (default: all enabled in config)"
+    };
+
+    public static readonly Option<string?> ModelOverrideOption = new("--model")
+    {
+        Description = "Override model name for all scanners (bypasses planner)"
     };
 
     /// <summary>
@@ -46,6 +51,7 @@ public static class AgentCommandSetup
             OutputOption,
             HeadlessOption,
             ScanOption,
+            ModelOverrideOption,
         };
 
         command.SetAction(action);
