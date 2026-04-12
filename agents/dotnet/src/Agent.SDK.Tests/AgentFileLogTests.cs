@@ -11,8 +11,8 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
         _dir = Path.Combine(Path.GetTempPath(), $"log-tests-{Guid.NewGuid():N}");
     }
 
-    public Task InitializeAsync() => Task.CompletedTask;
-    public Task DisposeAsync() => Task.CompletedTask;
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     public void Dispose()
     {
@@ -32,7 +32,7 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
 
         var logPath = Path.Combine(_dir, "agent_error.log");
         Assert.True(File.Exists(logPath));
-        var content = await File.ReadAllTextAsync(logPath);
+        var content = await File.ReadAllTextAsync(logPath, TestContext.Current.CancellationToken);
         Assert.Contains("Agent Error Log", content);
     }
 
@@ -43,7 +43,7 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
         await AgentErrorLog.LogAsync("TestScanner", "Something went wrong");
         await AgentErrorLog.CloseAsync();
 
-        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "agent_error.log"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "agent_error.log"), TestContext.Current.CancellationToken);
         Assert.Contains("[TestScanner] Something went wrong", content);
     }
 
@@ -55,7 +55,7 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
         await AgentErrorLog.LogAsync("Scanner", "Tool failed", ex);
         await AgentErrorLog.CloseAsync();
 
-        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "agent_error.log"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "agent_error.log"), TestContext.Current.CancellationToken);
         Assert.Contains("[Scanner] Tool failed", content);
         Assert.Contains("InvalidOperationException: bad state", content);
     }
@@ -83,7 +83,7 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
 
         var logPath = Path.Combine(_dir, "agent_streaming_debug.log");
         Assert.True(File.Exists(logPath));
-        var content = await File.ReadAllTextAsync(logPath);
+        var content = await File.ReadAllTextAsync(logPath, TestContext.Current.CancellationToken);
         Assert.Contains("Streaming Debug Log", content);
         Assert.Contains("[TEST] hello", content);
     }
@@ -99,7 +99,7 @@ public sealed class AgentFileLogTests : IAsyncLifetime, IDisposable
         await AgentDebugLog.FlushAsync();
         await AgentDebugLog.CloseAsync();
 
-        var content = await File.ReadAllTextAsync(logPath);
+        var content = await File.ReadAllTextAsync(logPath, TestContext.Current.CancellationToken);
         Assert.Contains("buffered", content);
     }
 

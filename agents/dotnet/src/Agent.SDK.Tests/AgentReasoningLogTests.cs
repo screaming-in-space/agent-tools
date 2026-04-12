@@ -36,7 +36,7 @@ public sealed class AgentReasoningLogTests : IDisposable
 
         await AgentReasoningLog.WriteAsync(_dir, "TestAgent", summary, scanners);
 
-        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"), TestContext.Current.CancellationToken);
         Assert.Contains("# Reasoning Trace", content);
         Assert.Contains("> Agent: TestAgent", content);
         Assert.Contains("## Test Scanner", content);
@@ -59,7 +59,7 @@ public sealed class AgentReasoningLogTests : IDisposable
 
         await AgentReasoningLog.WriteAsync(_dir, "Agent", summary, [scanner]);
 
-        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"), TestContext.Current.CancellationToken);
         Assert.Contains("Reading file (src/Program.cs)", content);
         Assert.Contains("Writing output (context/MAP.md)", content);
     }
@@ -78,7 +78,7 @@ public sealed class AgentReasoningLogTests : IDisposable
 
         await AgentReasoningLog.WriteAsync(_dir, "Agent", summary, [scanner]);
 
-        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"), TestContext.Current.CancellationToken);
         Assert.Contains("✗ FAILED", content);
         Assert.Contains("- **Status:** Failed", content);
     }
@@ -98,7 +98,7 @@ public sealed class AgentReasoningLogTests : IDisposable
 
         await AgentReasoningLog.WriteAsync(_dir, "Agent", summary, [scanner]);
 
-        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_dir, "REASONING.md"), TestContext.Current.CancellationToken);
         Assert.Contains("### Thinking", content);
         Assert.Contains("I need to analyze the files first.", content);
         Assert.Contains("### Response", content);

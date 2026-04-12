@@ -60,3 +60,6 @@ dotnet_diagnostic.CA1848.severity = silent
 
 # CA1707: Underscores in test names — standard xUnit Method_Scenario_Expected convention
 dotnet_diagnostic.CA1707.severity = silent
+
+# xUnit1051: CancellationToken pass-through — test file I/O and fake HTTP don't need cancellation
+dotnet_diagnostic.xUnit1051.severity = suggestion
