@@ -174,17 +174,12 @@ internal static class ReportFormatter
 
                 foreach (var pr in card.PromptResults)
                 {
-                    var promptCategory = pr.Benchmark.PromptName.Contains("format") || pr.Benchmark.PromptName.Contains("list") || pr.Benchmark.PromptName.Contains("stop")
-                        ? "instruct" : pr.Benchmark.PromptName.Contains("extract")
-                        ? "extract" : pr.Benchmark.PromptName.Contains("generate") || pr.Benchmark.PromptName.Contains("table")
-                        ? "markdown" : "reason";
-
                     var judgeStr = pr.Judge is not null ? $"{pr.Judge.Score}/10" : "-";
 
                     if (showThinking && showJudge)
                     {
                         sb.AppendLine(
-                            $"| {pr.PromptName} | {promptCategory} " +
+                            $"| {pr.PromptName} | {pr.Category} " +
                             $"| {pr.Benchmark.TokensPerSecond:F1} | {pr.Benchmark.GenerationTokensPerSecond:F1} " +
                             $"| {pr.Benchmark.ThinkingDuration.TotalMilliseconds:F0} | {pr.Benchmark.TotalDuration.TotalSeconds:F1}s " +
                             $"| {pr.Accuracy.Score:F2} | {judgeStr} | {(pr.Accuracy.Passed ? "\u2713" : "\u2717")} |");
@@ -192,7 +187,7 @@ internal static class ReportFormatter
                     else if (showThinking)
                     {
                         sb.AppendLine(
-                            $"| {pr.PromptName} | {promptCategory} " +
+                            $"| {pr.PromptName} | {pr.Category} " +
                             $"| {pr.Benchmark.TokensPerSecond:F1} | {pr.Benchmark.GenerationTokensPerSecond:F1} " +
                             $"| {pr.Benchmark.ThinkingDuration.TotalMilliseconds:F0} | {pr.Benchmark.TotalDuration.TotalSeconds:F1}s " +
                             $"| {pr.Accuracy.Score:F2} | {(pr.Accuracy.Passed ? "\u2713" : "\u2717")} |");
@@ -200,14 +195,14 @@ internal static class ReportFormatter
                     else if (showJudge)
                     {
                         sb.AppendLine(
-                            $"| {pr.PromptName} | {promptCategory} " +
+                            $"| {pr.PromptName} | {pr.Category} " +
                             $"| {pr.Benchmark.TokensPerSecond:F1} | {pr.Benchmark.TotalDuration.TotalSeconds:F1}s " +
                             $"| {pr.Accuracy.Score:F2} | {judgeStr} | {(pr.Accuracy.Passed ? "\u2713" : "\u2717")} |");
                     }
                     else
                     {
                         sb.AppendLine(
-                            $"| {pr.PromptName} | {promptCategory} " +
+                            $"| {pr.PromptName} | {pr.Category} " +
                             $"| {pr.Benchmark.TokensPerSecond:F1} | {pr.Benchmark.TotalDuration.TotalSeconds:F1}s " +
                             $"| {pr.Accuracy.Score:F2} | {(pr.Accuracy.Passed ? "\u2713" : "\u2717")} |");
                     }

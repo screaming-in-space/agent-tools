@@ -86,10 +86,13 @@ public static class BossPrompt
 
         - Warmup iterations: 1
         - Measured iterations: 3
-        - Benchmark suites: instruction_following, extraction, markdown_generation, reasoning
-        - Accuracy scoring: deterministic (substring matching, structure validation, bigram similarity)
+        - Benchmark suites: instruction_following, extraction, markdown_generation, reasoning, multi_turn, context_window
+        - Accuracy scoring: deterministic (substring matching, structure validation, bigram similarity, preamble detection)
         - Speed metrics: streaming token counting with Stopwatch-based timing
-        - Composite formula: (accuracy × 0.6) + (normalized_speed × 0.3) + (pass_rate × 0.1)
+        - Thinking tokens tracked separately; generation tok/s excludes thinking overhead
+        - LLM-as-judge: best-scoring model evaluates others on 1-10 scale (5 dimensions)
+        - Composite (with judge): (accuracy × 0.35) + (judge × 0.30) + (normalized_speed × 0.25) + (pass_rate × 0.10)
+        - Composite (without judge): (accuracy × 0.6) + (normalized_speed × 0.3) + (pass_rate × 0.1)
 
         ## Rules
 

@@ -44,6 +44,39 @@ public static class AgentTheme
     public static readonly Style Muted = new(Dim);
     public static readonly Style Accent = new(Orange);
 
+    // ── Markup Helpers ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Converts a <see cref="Style"/> to a Spectre markup format string.
+    /// Example: <c>FormatStyle(Header)</c> → <c>"rgb(110,168,224) bold"</c>.
+    /// </summary>
+    public static string FormatStyle(Style style)
+    {
+        var parts = new List<string>();
+
+        if (style.Foreground != Color.Default)
+        {
+            parts.Add($"rgb({style.Foreground.R},{style.Foreground.G},{style.Foreground.B})");
+        }
+
+        if (style.Decoration.HasFlag(Decoration.Bold))
+        {
+            parts.Add("bold");
+        }
+
+        if (style.Decoration.HasFlag(Decoration.Dim))
+        {
+            parts.Add("dim");
+        }
+
+        if (style.Decoration.HasFlag(Decoration.Italic))
+        {
+            parts.Add("italic");
+        }
+
+        return parts.Count > 0 ? string.Join(' ', parts) : "default";
+    }
+
     // ── Reusable Component Helpers ─────────────────────────────────────
 
     /// <summary>Cyan horizontal rule. Pass a title for a labeled divider.</summary>

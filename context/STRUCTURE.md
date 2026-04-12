@@ -46,10 +46,14 @@ agents/dotnet/
 │   │   │   ├── EndpointHealthCheck.cs  # GET /v1/models validation before agent run
 │   │   │   └── ModelRegistry.cs        # Compact model + GPU registry from _registry.json files
 │   │   ├── Console/
-│   │   │   ├── IAgentOutput.cs         # IAgentOutput interface, AgentRunSummary record, AgentConsole static accessor
+│   │   │   ├── IAgentOutput.cs         # IAgentOutput interface, AgentRunSummary, TestCheckResult, AgentConsole static accessor
+│   │   │   ├── UIMessage.cs            # Channel message types: 11 sealed records (tokens, tests, errors, phases, judge)
+│   │   │   ├── RingBuffer.cs           # Generic fixed-capacity circular buffer (drop-oldest overflow)
+│   │   │   ├── ChannelAgentOutput.cs   # IAgentOutput → Channel<UIMessage> writer (bounded, drop-oldest, 2000 capacity)
+│   │   │   ├── ChannelAgentRenderer.cs # Channel consumer: vertically-extending Spectre panels per test/phase
 │   │   │   ├── PlainAgentOutput.cs     # Headless output: routes all output through Serilog
 │   │   │   ├── SpectreAgentOutput.cs   # Interactive output: Spectre.Console live rendering with scanner tree
-│   │   │   ├── AgentTheme.cs           # Kurzgesagt color palette, logo, Spectre helpers
+│   │   │   ├── AgentTheme.cs           # Kurzgesagt color palette, logo, Spectre helpers, FormatStyle markup converter
 │   │   │   ├── AgentFileLog.cs         # Abstract base for buffered log files with SemaphoreSlim sync
 │   │   │   ├── AgentErrorLog.cs        # Singleton error log (agent_error.log)
 │   │   │   ├── AgentDebugLog.cs        # Singleton streaming debug log (agent_streaming_debug.log)
@@ -80,7 +84,9 @@ agents/dotnet/
 │   │   ├── StreamingInterceptorTests.cs # DelegatingChatClient construction and delegation
 │   │   ├── AgentFileLogTests.cs        # Error log + debug log lifecycle, truncation
 │   │   ├── AgentReasoningLogTests.cs   # REASONING.md output format and content
-│   │   └── ToolProgressWrapperTests.cs # Truncation behavior
+│   │   ├── ToolProgressWrapperTests.cs # Truncation behavior
+│   │   ├── RingBufferTests.cs          # Circular buffer: capacity, overflow, ordering, clear
+│   │   └── ChannelAgentOutputTests.cs  # Channel-based IAgentOutput: contracts, counting, lifecycle
 │   ├── CrimeSceneInvestigator/         # Agent: scans a codebase and produces context directory
 │   │   ├── Telemetry/
 │   │   │   └── CsiTelemetry.cs         # CsiTrace (AgentTrace) + CsiMetrics (Meter + instruments)
@@ -108,30 +114,33 @@ agents/dotnet/
 │   ├── ModelBoss/                       # Agent: benchmarks local LLMs and produces ranked scorecards
 │   │   ├── Benchmarks/
 │   │   │   ├── AccuracyResult.cs        # Accuracy assessment record with individual check breakdowns
-│   │   │   ├── AccuracyScorer.cs        # Deterministic output scoring (substrings, structure, bigram similarity)
-│   │   │   ├── BenchmarkPrompt.cs       # Prompt definition with expected output criteria
-│   │   │   ├── BenchmarkResult.cs       # Raw timing result per inference request
-│   │   │   ├── BenchmarkRunner.cs       # Warmup + measured iterations with streaming token counting
-│   │   │   ├── BenchmarkSuites.cs       # Built-in prompt suites (instruction, extraction, markdown, reasoning)
-│   │   │   ├── ModelScorecard.cs        # Aggregated scorecard with composite, speed, accuracy metrics
-│   │   │   └── ScorecardBuilder.cs      # Pure computation: raw results → scorecard with percentiles
+│   │   │   ├── AccuracyScorer.cs        # Deterministic output scoring (substrings, structure, bigram, preamble, multi-turn)
+│   │   │   ├── BenchmarkPrompt.cs       # Prompt definition with difficulty levels, multi-turn support, expected output
+│   │   │   ├── BenchmarkResult.cs       # Raw timing result per inference request with thinking token metrics
+│   │   │   ├── BenchmarkRunner.cs       # Warmup + measured iterations, single-turn and multi-turn, thinking tracking
+│   │   │   ├── BenchmarkSuites.cs       # Built-in suites (instruction, extraction, markdown, reasoning, multi-turn, context-window)
+│   │   │   ├── JudgeResult.cs           # LLM-as-judge evaluation result (1-10 scale, normalized, reasoning)
+│   │   │   ├── LlmJudge.cs             # MT-Bench inspired LLM-as-judge scorer with rubric construction and score parsing
+│   │   │   ├── ModelScorecard.cs        # Aggregated scorecard with speed, accuracy, thinking, and judge metrics
+│   │   │   └── ScorecardBuilder.cs      # Pure computation: raw results → scorecard with percentiles and judge composite
 │   │   ├── Tools/
 │   │   │   ├── BenchmarkTools.cs        # Agent-callable tools wrapping BenchmarkRunner + AccuracyScorer
 │   │   │   ├── GpuTools.cs              # GPU discovery and model-fit compatibility matrix
 │   │   │   ├── ModelTools.cs            # Model registry, config resolution, endpoint queries
 │   │   │   └── ReportTools.cs           # File output tool for writing benchmark reports
-│   │   ├── BossAgent.cs                 # Orchestrator: resolve → validate → benchmark → score → report
+│   │   ├── BossAgent.cs                 # Orchestrator: resolve → validate → benchmark → judge → score → report
 │   │   ├── BossCommandSetup.cs          # System.CommandLine definitions (--models, --iterations, --category)
 │   │   ├── BossPrompt.cs               # System prompt for LLM-driven benchmark workflow
-│   │   ├── ReportFormatter.cs           # Markdown report builder from ranked scorecards
+│   │   ├── ReportFormatter.cs           # Markdown report builder with judge columns and thinking metrics
 │   │   ├── appsettings.json             # Serilog overrides, Models:{key} config sections
 │   │   ├── ModelBoss.csproj
 │   │   └── Program.cs                   # Thin bootstrap: config, logging, CLI invoke, flush
 │   └── ModelBoss.Tests/                 # Unit tests for ModelBoss
 │       ├── ModelBoss.Tests.csproj
-│       ├── AccuracyScorerTests.cs       # Accuracy scoring: substrings, structure, length, similarity, pass/fail
-│       ├── BenchmarkSuitesTests.cs      # Suite categories, unique names, prompt validation
-│       └── ScorecardBuilderTests.cs     # Aggregation, composite formula, percentiles, pass rate
+│       ├── AccuracyScorerTests.cs       # Accuracy scoring: substrings, structure, length, similarity, preamble, multi-turn
+│       ├── BenchmarkSuitesTests.cs      # Suite categories, unique names, prompt validation, multi-turn + context-window
+│       ├── LlmJudgeTests.cs            # Score parsing (bracket, labeled, trailing digit), NormalizedScore mapping
+│       └── ScorecardBuilderTests.cs     # Aggregation, composite formula, percentiles, pass rate, judge integration
 ├── .github/
 │   └── copilot-instructions.md         # Thin shim (workspace-scoped)
 ├── .editorconfig                       # Code style + analyzer severity overrides
@@ -152,10 +161,14 @@ Shared class library. Contains reusable infrastructure that every agent needs bu
 | `Configuration/AgentScanOptions.cs` | Sealed record controlling which scanners are enabled. Bound from `AgentInCommand` section in `appsettings.json`. `FromCliOverride` parses `--scan` CLI option. |
 | `Configuration/EndpointHealthCheck.cs` | Static `ValidateAsync` calls `GET /v1/models` on the configured endpoint. Verifies reachability and that the configured model is loaded. Returns `HealthCheckResult` record. |
 | `Configuration/ModelRegistry.cs` | Compact model + GPU registry loaded from `context/models/_registry.json` and `context/gpu/_registry.json`. Records: `ModelRegistry`, `ModelEntry`, `GpuEntry`, `ScannerRatings`, `InferenceSettings`. Static `Load(repoRoot)` with graceful fallback to empty. |
-| `Console/IAgentOutput.cs` | `IAgentOutput` interface (scanner lifecycle, tool progress, thinking, summary), `AgentRunSummary` record, `AgentConsole` static accessor. |
+| `Console/IAgentOutput.cs` | `IAgentOutput` interface (scanner lifecycle, tool progress, thinking, summary, test lifecycle), `AgentRunSummary` record, `TestCheckResult` record, `AgentConsole` static accessor with `channelMode` option. |
+| `Console/UIMessage.cs` | 11 sealed record types for the Channel-based UI pipeline: `ThinkingTokenMessage`, `ResponseTokenMessage`, `TestStartedMessage`, `TestCompletedMessage`, `ModelPhaseStartedMessage/Completed`, `ErrorMessage`, `StatusMessage`, `JudgeResultMessage`, `JudgePhaseStartedMessage`. |
+| `Console/RingBuffer.cs` | Generic fixed-capacity circular buffer. `Add(T)`, `ToList()`, `Newest`. Drop-oldest on overflow. Single-threaded consumer. |
+| `Console/ChannelAgentOutput.cs` | `IAgentOutput` implementation writing `UIMessage` records to `Channel.CreateBounded<UIMessage>(2000, DropOldest)`. Maintains `ScannerTrace` list for REASONING.md. Never blocks producers. |
+| `Console/ChannelAgentRenderer.cs` | Spectre.Console renderer consuming from `ChannelReader<UIMessage>`. Vertically-extending panels — each test gets its own panel with streaming tokens, results, and checks. Model headers, error panels, judge results, and summary panel. |
 | `Console/PlainAgentOutput.cs` | Headless implementation of `IAgentOutput`. Routes all output through Serilog. No Spectre rendering. |
 | `Console/SpectreAgentOutput.cs` | Interactive implementation of `IAgentOutput`. Spectre.Console live rendering with scanner tree, progress bar, spinner, and summary panel. |
-| `Console/AgentTheme.cs` | Kurzgesagt color palette, Spectre.Console helpers (Logo, Divider), version info extraction. |
+| `Console/AgentTheme.cs` | Kurzgesagt color palette, Spectre.Console helpers (Logo, Divider), `FormatStyle` markup converter, version info extraction. |
 | `Console/AgentFileLog.cs` | Abstract base class for buffered log files with `SemaphoreSlim` sync and size-based rotation. |
 | `Console/AgentErrorLog.cs` | Singleton error log (`agent_error.log`). Logs scanner failures with timestamps. |
 | `Console/AgentDebugLog.cs` | Singleton streaming debug log (`agent_streaming_debug.log`) with 10MB rotation. |
@@ -214,6 +227,8 @@ Unit and integration tests for shared SDK components.
 | `AgentFileLogTests.cs` | Error log + debug log lifecycle, directory creation, truncation. |
 | `AgentReasoningLogTests.cs` | REASONING.md output format, tool calls, thinking/response content. |
 | `ToolProgressWrapperTests.cs` | Truncation behavior via `AgentFileLog.Truncate`. |
+| `RingBufferTests.cs` | Capacity, overflow drop-oldest, empty state, iteration order, clear, single capacity. |
+| `ChannelAgentOutputTests.cs` | IAgentOutput method contracts, tool call counting, test lifecycle events. |
 
 **Depends on:** Agent.SDK (project ref), xUnit, NSubstitute (auto-imported via `Test.Build.props`)
 
@@ -232,23 +247,25 @@ Agent-specific tests for prompts, health check, and fallback validation.
 
 ### ModelBoss
 
-Console agent. Benchmarks local LLM models against built-in prompt suites and produces ranked scorecards with composite scores combining speed, accuracy, and pass rate. No LLM-as-judge — all scoring is deterministic (substring matching, structure validation, bigram similarity).
+Console agent. Benchmarks local LLM models against built-in prompt suites and produces ranked scorecards with composite scores combining speed, accuracy, LLM-as-judge quality, and pass rate. Scoring is hybrid: deterministic accuracy checks (substring matching, structure validation, bigram similarity, preamble detection) plus an optional LLM-as-judge pass where the best-performing model evaluates others on a 1-10 scale (MT-Bench inspired). Supports single-turn, multi-turn conversation, and RULER-inspired context-window benchmarks with three difficulty levels.
 
 | File | Purpose |
 |------|---------|
 | `Program.cs` | Thin bootstrap: builds `IConfiguration` from `appsettings.json`, configures logging + console, creates `BossAgent`, invokes CLI. Manual wiring, no DI container. |
 | `BossCommandSetup.cs` | System.CommandLine `RootCommand` factory — `--models`, `--iterations`, `--category`, `--output`, `--repo-root`, `--headless` options. |
-| `BossAgent.cs` | Record with `ILoggerFactory` + `IConfiguration`. Orchestrates: resolve CLI → load registries → validate endpoint → run benchmarks per model → score accuracy → build scorecards → write report. |
+| `BossAgent.cs` | Record with `ILoggerFactory` + `IConfiguration`. Orchestrates: resolve CLI → load registries → validate endpoint → run benchmarks per model → score accuracy → LLM-as-judge pass (best model judges others) → rebuild scorecards with judge results → write report. |
 | `BossPrompt.cs` | System prompt for LLM-driven workflow: discover hardware, check loaded models, run benchmarks, compose and save report. |
-| `ReportFormatter.cs` | Internal. Formats ranked markdown report with rankings table, hardware summary, per-model scorecards, recommendations, and methodology. |
-| `Benchmarks/BenchmarkRunner.cs` | Executes prompts against a model endpoint with warmup + measured iterations. Streaming token counting with `Stopwatch`-based timing. |
-| `Benchmarks/BenchmarkSuites.cs` | Built-in prompt suites: `InstructionFollowing` (format compliance), `Extraction` (structured data), `MarkdownGeneration` (clean markdown), `Reasoning` (multi-step analysis). |
-| `Benchmarks/BenchmarkPrompt.cs` | Sealed record defining a benchmark prompt with `ExpectedOutput` criteria (required/forbidden substrings, structure, reference, length bounds, pass threshold). |
-| `Benchmarks/BenchmarkResult.cs` | Raw timing result per inference request: duration, TTFT, token counts, raw output, success flag. |
-| `Benchmarks/AccuracyScorer.cs` | Deterministic scoring: length, required substrings, forbidden substrings, structural elements, bigram similarity to reference. Weighted composite per check. |
+| `ReportFormatter.cs` | Internal. Formats ranked markdown report with rankings table (including judge column when applicable), hardware summary, per-model scorecards with thinking metrics, recommendations, and methodology. |
+| `Benchmarks/BenchmarkRunner.cs` | Executes prompts against a model endpoint with warmup + measured iterations. Single-turn and multi-turn (MT-Bench style) execution via `StreamingTokenTracker` (shared processing logic). Streaming token counting with `Stopwatch`-based timing. Tracks thinking tokens (`TextReasoningContent`) separately. Forwards tokens to optional `IAgentOutput` for live UI streaming. |
+| `Benchmarks/BenchmarkSuites.cs` | Six built-in prompt suites: `InstructionFollowing` (format compliance), `Extraction` (structured data), `MarkdownGeneration` (clean markdown), `Reasoning` (multi-step analysis), `MultiTurn` (MT-Bench style conversation coherence), `ContextWindow` (RULER-inspired needle-in-haystack, multi-key retrieval, variable tracking). Three difficulty levels per suite. `UpToLevel` filters by max difficulty. `GetByCategory` resolves category name to suite (canonical, used by BossAgent + BenchmarkTools). All prompts include human-readable `Description`. |
+| `Benchmarks/BenchmarkPrompt.cs` | Sealed record with `Description`, `BenchmarkDifficulty` level (Level1/Level2/Level3). Single-turn via `UserMessage` + `Expected`. Multi-turn via `Turns` list of `ConversationTurn` records. `ExpectedOutput` includes `ForbiddenPreamble` (first-100-char check) and configurable `PassThreshold`. |
+| `Benchmarks/BenchmarkResult.cs` | Raw timing result per inference request: duration, TTFT, `TimeToFirstThinking`, `ThinkingDuration`, `ThinkingTokens`, `GenerationTokensPerSecond` (excluding thinking overhead), raw output, success flag. |
+| `Benchmarks/AccuracyScorer.cs` | Deterministic scoring: length, required substrings, forbidden substrings, forbidden preamble, structural elements, bigram similarity to reference. Multi-turn scoring splits output on `---TURN_N---` markers and weights later turns higher. Weighted composite per check. |
 | `Benchmarks/AccuracyResult.cs` | Accuracy assessment record with individual `AccuracyCheck` breakdowns. |
-| `Benchmarks/ModelScorecard.cs` | Aggregated scorecard: median tok/s, P5 tok/s, TTFT, accuracy mean, pass rate, composite. `ModelSummary` for registry metadata. |
-| `Benchmarks/ScorecardBuilder.cs` | Pure computation: raw results → percentile-based speed metrics → composite score `(accuracy × 0.6) + (normalized_speed × 0.3) + (pass_rate × 0.1)`. |
+| `Benchmarks/JudgeResult.cs` | LLM-as-judge evaluation result: 1-10 score, `NormalizedScore` (0.0-1.0), judge model ID, reasoning text, parse success flag. |
+| `Benchmarks/LlmJudge.cs` | MT-Bench inspired scorer. Uses the best-performing model from the benchmark run to evaluate other models' responses. Single-turn and multi-turn rubrics with five scoring dimensions. Score parsing: `[[N]]` brackets → labeled `score: N` → trailing digit fallback. 90s timeout per evaluation. Judge never evaluates its own responses. |
+| `Benchmarks/ModelScorecard.cs` | Aggregated scorecard: median tok/s, P5 tok/s, generation tok/s (excluding thinking), TTFT, thinking metrics, accuracy mean, pass rate, judge metrics (`MeanJudgeScore`, `MeanJudgeNormalized`, `JudgedPromptCount`, `IsJudgeModel`), composite. `PromptResult` includes optional `JudgeResult`. `ModelSummary` for registry metadata. |
+| `Benchmarks/ScorecardBuilder.cs` | Pure computation: raw results → percentile-based speed metrics → composite score. Two formulas: without judge `(accuracy × 0.6) + (speed × 0.3) + (pass_rate × 0.1)`, with judge `(accuracy × 0.35) + (judge × 0.30) + (speed × 0.25) + (pass_rate × 0.10)`. Judge model uses the without-judge formula. |
 | `Tools/BenchmarkTools.cs` | Agent-callable tools wrapping `BenchmarkRunner` + `AccuracyScorer`. `RunSpeedBenchmarkAsync`, `RunAccuracyBenchmarkAsync`, `RunFullSuiteAsync`. |
 | `Tools/ModelTools.cs` | Registry data, endpoint queries, config resolution. `ListRegisteredModels`, `ListConfiguredModels`, `GetLoadedModelsAsync`, `GetModelProfile`. |
 | `Tools/GpuTools.cs` | GPU discovery. `ListGpus`, `CheckModelFit` (compatibility matrix at Q4/Q8 quantization). |
@@ -259,13 +276,14 @@ Console agent. Benchmarks local LLM models against built-in prompt suites and pr
 
 ### ModelBoss.Tests
 
-Unit tests for ModelBoss benchmark engine and scoring.
+Unit tests for ModelBoss benchmark engine, scoring, and LLM-as-judge.
 
 | File | Purpose |
 |------|---------|
-| `AccuracyScorerTests.cs` | Tests `Score` through public API: required/forbidden substrings, length validation, structural elements, reference similarity, composite pass/fail, null/empty edge cases. |
-| `ScorecardBuilderTests.cs` | Aggregation: empty results, multi-prompt, failed benchmark exclusion, composite formula weights, speed normalization cap, pass rate, registry metadata preservation. |
-| `BenchmarkSuitesTests.cs` | Suite integrity: all categories present, count matches sum-of-parts, unique names, non-empty messages, expected output, reasonable timeouts, minimum prompt counts. |
+| `AccuracyScorerTests.cs` | Tests `Score` through public API: required/forbidden substrings, length validation, structural elements, reference similarity, preamble detection, multi-turn scoring, composite pass/fail, null/empty edge cases. |
+| `ScorecardBuilderTests.cs` | Aggregation: empty results, multi-prompt, failed benchmark exclusion, composite formula weights, speed normalization cap, pass rate, registry metadata preservation, judge integration. |
+| `BenchmarkSuitesTests.cs` | Suite integrity: all six categories present (instruction, extraction, markdown, reasoning, multi_turn, context_window), count matches sum-of-parts, unique names, non-empty messages, expected output, reasonable timeouts, minimum prompt counts. |
+| `LlmJudgeTests.cs` | `ParseScore` bracket `[[N]]` pattern, labeled `score: N` pattern, trailing digit fallback, priority ordering, clamping, edge cases (null, empty, no pattern). `JudgeResult.NormalizedScore` mapping (1→0.0, 10→1.0). |
 
 **Depends on:** ModelBoss (project ref), xUnit, NSubstitute (auto-imported via `Test.Build.props`)
 

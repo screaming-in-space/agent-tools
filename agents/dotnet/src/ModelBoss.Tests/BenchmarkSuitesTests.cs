@@ -201,4 +201,55 @@ public class BenchmarkSuitesTests
 
         Assert.Equal(all.Count, level3.Count);
     }
+
+    // ── GetByCategory tests ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData("instruction_following")]
+    [InlineData("extraction")]
+    [InlineData("markdown_generation")]
+    [InlineData("reasoning")]
+    [InlineData("multi_turn")]
+    [InlineData("context_window")]
+    public void GetByCategory_ReturnsCorrectSuite(string category)
+    {
+        var prompts = BenchmarkSuites.GetByCategory(category);
+
+        Assert.True(prompts.Count > 0);
+        Assert.All(prompts, p => Assert.Equal(category, p.Category));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("all")]
+    [InlineData("ALL")]
+    public void GetByCategory_AllOrNull_ReturnsAllPrompts(string? category)
+    {
+        var prompts = BenchmarkSuites.GetByCategory(category);
+        var all = BenchmarkSuites.All();
+
+        Assert.Equal(all.Count, prompts.Count);
+    }
+
+    [Fact]
+    public void GetByCategory_UnknownCategory_ReturnsAll()
+    {
+        var prompts = BenchmarkSuites.GetByCategory("nonexistent_category");
+        var all = BenchmarkSuites.All();
+
+        Assert.Equal(all.Count, prompts.Count);
+    }
+
+    // ── Description tests ─────────────────────────────────────────────
+
+    [Fact]
+    public void AllPrompts_HaveNonEmptyDescription()
+    {
+        var all = BenchmarkSuites.All();
+
+        Assert.All(all, p => Assert.False(
+            string.IsNullOrWhiteSpace(p.Description),
+            $"{p.Name} is missing a Description"));
+    }
 }

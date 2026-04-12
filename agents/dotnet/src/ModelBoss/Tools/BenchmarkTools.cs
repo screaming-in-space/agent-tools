@@ -29,11 +29,11 @@ public sealed class BenchmarkTools(
         }
 
         var modelOptions = AgentModelOptions.Resolve(configuration, configKey);
-        var prompts = GetPromptsByCategory(category);
+        var prompts = BenchmarkSuites.GetByCategory(category);
 
         if (prompts.Count == 0)
         {
-            return $"No prompts found for category '{category}'. Available: instruction_following, extraction, markdown_generation, reasoning, all";
+            return $"No prompts found for category '{category}'. Available: instruction_following, extraction, markdown_generation, reasoning, multi_turn, context_window, all";
         }
 
         var options = new BenchmarkRunOptions
@@ -62,7 +62,7 @@ public sealed class BenchmarkTools(
         }
 
         var modelOptions = AgentModelOptions.Resolve(configuration, configKey);
-        var prompts = GetPromptsByCategory(category);
+        var prompts = BenchmarkSuites.GetByCategory(category);
 
         if (prompts.Count == 0)
         {
@@ -152,30 +152,14 @@ public sealed class BenchmarkTools(
             }
         }
 
+        var promptCategories = prompts.ToDictionary(p => p.Name, p => p.Category);
         var scorecard = ScorecardBuilder.Build(
-            configKey, modelOptions, benchResults, accuracyResults, registryInfo: null);
+            configKey, modelOptions, benchResults, accuracyResults, registryInfo: null, promptCategories);
 
         return FormatScorecard(scorecard);
     }
 
     // ── Formatting helpers ─────────────────────────────────────────────
-
-    private static IReadOnlyList<BenchmarkPrompt> GetPromptsByCategory(string? category)
-    {
-        if (string.IsNullOrWhiteSpace(category) || string.Equals(category, "all", StringComparison.OrdinalIgnoreCase))
-        {
-            return BenchmarkSuites.All();
-        }
-
-        return category.ToLowerInvariant() switch
-        {
-            "instruction_following" => BenchmarkSuites.InstructionFollowing(),
-            "extraction" => BenchmarkSuites.Extraction(),
-            "markdown_generation" => BenchmarkSuites.MarkdownGeneration(),
-            "reasoning" => BenchmarkSuites.Reasoning(),
-            _ => [],
-        };
-    }
 
     private static string FormatSpeedResults(
         string configKey,

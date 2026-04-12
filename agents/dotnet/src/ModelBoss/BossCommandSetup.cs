@@ -8,11 +8,6 @@ namespace ModelBoss;
 /// </summary>
 public static class BossCommandSetup
 {
-    public static readonly Option<string?> ConfigKeyOption = new("--config-key")
-    {
-        Description = "Model configuration key to benchmark (default: benchmarks all configured models)"
-    };
-
     public static readonly Option<string?> OutputOption = new("--output")
     {
         Description = "Output directory for benchmark reports (default: ./benchmarks)"
@@ -35,7 +30,7 @@ public static class BossCommandSetup
 
     public static readonly Option<string?> CategoryOption = new("--category")
     {
-        Description = "Benchmark category to run: instruction_following, extraction, markdown_generation, reasoning, all (default: all)"
+        Description = "Benchmark category to run: instruction_following, extraction, markdown_generation, reasoning, multi_turn, context_window, all (default: all)"
     };
 
     public static readonly Option<string?> RepoRootOption = new("--repo-root")
@@ -50,7 +45,6 @@ public static class BossCommandSetup
     {
         var command = new RootCommand("ModelBoss - Benchmark local LLM models with speed, accuracy, and quality scoring.")
         {
-            ConfigKeyOption,
             OutputOption,
             HeadlessOption,
             ModelsOption,

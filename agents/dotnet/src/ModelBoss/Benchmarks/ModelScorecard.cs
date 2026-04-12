@@ -92,6 +92,7 @@ public sealed record ModelScorecard
 public sealed record PromptResult
 {
     public required string PromptName { get; init; }
+    public required string Category { get; init; }
     public required BenchmarkResult Benchmark { get; init; }
     public required AccuracyResult Accuracy { get; init; }
 

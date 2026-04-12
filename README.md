@@ -27,7 +27,7 @@ agent-tools/
 | Agent | Description |
 |-------|-------------|
 | [`CrimeSceneInvestigator`](agents/dotnet/src/CrimeSceneInvestigator/) | Multi-scanner codebase intelligence agent. Scans a git repo and produces structured context files for LLM consumption. |
-| [`ModelBoss`](agents/dotnet/src/ModelBoss/) | Benchmark local LLM models with deterministic speed, accuracy, and quality scoring. Produces ranked scorecards. |
+| [`ModelBoss`](agents/dotnet/src/ModelBoss/) | Benchmark local LLM models with hybrid scoring (deterministic + LLM-as-judge). Supports multi-turn and context-window benchmarks. Produces ranked scorecards. |
 
 ### Prerequisites
 
@@ -65,7 +65,7 @@ dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- . --model gemma
 
 ### ModelBoss
 
-Benchmarks local LLM models with deterministic speed, accuracy, and quality scoring. Produces ranked scorecards with composite scores.
+Benchmarks local LLM models with hybrid scoring: deterministic accuracy checks plus an LLM-as-judge quality pass (MT-Bench inspired). Supports single-turn, multi-turn conversation, and RULER-inspired context-window benchmarks. Produces ranked scorecards with composite scores.
 
 ```bash
 # Benchmark all configured models with interactive Spectre UI
@@ -88,7 +88,7 @@ dotnet run --project agents/dotnet/src/ModelBoss -- --output ./my-results --head
 |--------|-------------|
 | `--models` | Comma-separated config keys to benchmark (default: all configured models) |
 | `--iterations` | Number of measured iterations per prompt (default: `3`) |
-| `--category` | Benchmark category: `instruction_following`, `extraction`, `markdown_generation`, `reasoning`, `all` (default: `all`) |
+| `--category` | Benchmark category: `instruction_following`, `extraction`, `markdown_generation`, `reasoning`, `multi_turn`, `context_window`, `all` (default: `all`) |
 | `--output` | Output directory for benchmark reports (default: `<repo-root>/benchmarks/`) |
 | `--repo-root` | Repository root for loading model/GPU registries (default: auto-detect) |
 | `--headless` | Disable rich terminal UI, use plain log output |
@@ -100,7 +100,7 @@ Each agent writes to a default output directory relative to the repo root. Overr
 | Agent | Default output | Files produced |
 |-------|----------------|----------------|
 | CrimeSceneInvestigator | `<target>/context/` | `MAP.md`, `RULES.md`, `STRUCTURE.md`, `QUALITY.md`, `JOURNAL.md`, `DONE.md` |
-| ModelBoss | `<repo-root>/benchmarks/` | `BENCHMARK.md` — ranked scorecards with speed, accuracy, and composite scores |
+| ModelBoss | `<repo-root>/benchmarks/` | `BENCHMARK.md` — ranked scorecards with speed, accuracy, LLM-as-judge quality, and composite scores |
 
 Output directories are created automatically if they don't exist. Benchmark results are overwritten on each run — commit or rename previous reports to preserve history.
 

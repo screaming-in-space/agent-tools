@@ -15,10 +15,11 @@ public static class ScorecardBuilder
         Agent.SDK.Configuration.AgentModelOptions modelOptions,
         Dictionary<string, IReadOnlyList<BenchmarkResult>> benchmarkResults,
         Dictionary<string, AccuracyResult> accuracyResults,
-        ModelSummary? registryInfo)
+        ModelSummary? registryInfo,
+        Dictionary<string, string>? promptCategories = null)
     {
         return Build(configKey, modelOptions, benchmarkResults, accuracyResults, registryInfo,
-            judgeResults: null, isJudgeModel: false);
+            judgeResults: null, isJudgeModel: false, promptCategories: promptCategories);
     }
 
     /// <summary>
@@ -33,7 +34,8 @@ public static class ScorecardBuilder
         Dictionary<string, AccuracyResult> accuracyResults,
         ModelSummary? registryInfo,
         Dictionary<string, JudgeResult>? judgeResults,
-        bool isJudgeModel)
+        bool isJudgeModel,
+        Dictionary<string, string>? promptCategories = null)
     {
         ArgumentNullException.ThrowIfNull(benchmarkResults);
         ArgumentNullException.ThrowIfNull(accuracyResults);
@@ -107,9 +109,13 @@ public static class ScorecardBuilder
                 JudgeResult? judge = null;
                 judgeResults?.TryGetValue(promptName, out judge);
 
+                var category = promptCategories is not null && promptCategories.TryGetValue(promptName, out var cat)
+                    ? cat : "unknown";
+
                 promptResults.Add(new PromptResult
                 {
                     PromptName = promptName,
+                    Category = category,
                     Benchmark = benchmark,
                     Accuracy = accuracy,
                     Judge = judge,

@@ -13,7 +13,7 @@ var configuration = new ConfigurationBuilder()
     .Build();
 
 AgentLogging.Configure(configuration, suppressConsole: !headless);
-AgentConsole.Configure(headless);
+AgentConsole.Configure(headless, channelMode: !headless);
 using var loggerFactory = AgentLogging.CreateLoggerFactory();
 
 try

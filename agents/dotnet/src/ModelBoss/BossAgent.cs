@@ -92,8 +92,9 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
             await output.UpdateStatusAsync($"Endpoint healthy — {health.LoadedModels.Count} model(s) loaded");
 
             // ── Run benchmarks for each model ──────────────────────────
-            var runner = new BenchmarkRunner(LoggerFactory.CreateLogger<BenchmarkRunner>());
-            var prompts = GetPromptsByCategory(category);
+            var runner = new BenchmarkRunner(LoggerFactory.CreateLogger<BenchmarkRunner>(), output);
+            var prompts = BenchmarkSuites.GetByCategory(category);
+            var promptCategories = prompts.ToDictionary(p => p.Name, p => p.Category);
 
             // Store intermediate results for judge pass
             var allBenchResults = new Dictionary<string, Dictionary<string, IReadOnlyList<BenchmarkResult>>>();
@@ -133,8 +134,15 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                             accuracyResults[prompt.Name] = accuracy;
                             rawOutputs[prompt.Name] = lastRun.RawOutput;
 
+                            var checks = accuracy.Checks
+                                .Select(c => new TestCheckResult(c.Name, c.Score, c.Detail))
+                                .ToList();
+
                             await output.ReportPromptResultAsync(
                                 prompt.Name, lastRun.TokensPerSecond, accuracy.Score);
+                            await output.ReportTestCompletedAsync(
+                                prompt.Name, lastRun.TokensPerSecond, lastRun.TimeToFirstToken,
+                                accuracy.Score, accuracy.Passed, checks);
                         }
                     }
 
@@ -145,7 +153,7 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                     // Build initial scorecard (without judge) to determine best model
                     var registryInfo = FindRegistryInfo(registry, modelOptions.Model);
                     var scorecard = ScorecardBuilder.Build(
-                        configKey, modelOptions, benchResults, accuracyResults, registryInfo);
+                        configKey, modelOptions, benchResults, accuracyResults, registryInfo, promptCategories);
                     initialScorecards.Add(scorecard);
 
                     benchSw.Stop();
@@ -156,12 +164,13 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                         configKey, scorecard.CompositeScore, scorecard.MeanAccuracyScore, scorecard.MedianTokensPerSecond);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        benchSw.Stop();
-                        await output.ScannerCompletedAsync($"Benchmark: {configKey}", benchSw.Elapsed, success: false);
-                        await AgentErrorLog.LogAsync($"Benchmark:{configKey}", $"Benchmark failed: {ex.Message}", ex);
-                        Logger.LogError(ex, "Benchmark failed for {ConfigKey}: {Message}", configKey, ex.Message);
-                    }
+                {
+                    benchSw.Stop();
+                    await output.ScannerCompletedAsync($"Benchmark: {configKey}", benchSw.Elapsed, success: false);
+                    await AgentErrorLog.LogAsync($"Benchmark:{configKey}", $"Benchmark failed: {ex.Message}", ex);
+                    await output.ReportErrorAsync($"Benchmark:{configKey}", ex.Message);
+                    Logger.LogError(ex, "Benchmark failed for {ConfigKey}: {Message}", configKey, ex.Message);
+                }
             }
 
             // ── LLM-as-judge pass ──────────────────────────────────────
@@ -213,6 +222,7 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                         judgeSw.Stop();
                         await output.ScannerCompletedAsync($"Judging: {configKey}", judgeSw.Elapsed, success: false);
                         await AgentErrorLog.LogAsync($"Judge:{configKey}", $"Judging failed: {ex.Message}", ex);
+                        await output.ReportErrorAsync($"Judge:{configKey}", ex.Message);
                         Logger.LogError(ex, "Judging failed for {ConfigKey}: {Message}", configKey, ex.Message);
                     }
                 }
@@ -233,7 +243,7 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
 
                 var scorecard = ScorecardBuilder.Build(
                     configKey, modelOptions, benchResults, accuracyResults, registryInfo,
-                    judgeResults, isJudge);
+                    judgeResults, isJudge, promptCategories);
                 scorecards.Add(scorecard);
             }
 
@@ -304,20 +314,6 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
         }
 
         return result;
-    }
-
-    private static IReadOnlyList<BenchmarkPrompt> GetPromptsByCategory(string category)
-    {
-        return category.ToLowerInvariant() switch
-        {
-            "instruction_following" => BenchmarkSuites.InstructionFollowing(),
-            "extraction" => BenchmarkSuites.Extraction(),
-            "markdown_generation" => BenchmarkSuites.MarkdownGeneration(),
-            "reasoning" => BenchmarkSuites.Reasoning(),
-            "multi_turn" => BenchmarkSuites.MultiTurn(),
-            "context_window" => BenchmarkSuites.ContextWindow(),
-            _ => BenchmarkSuites.All(),
-        };
     }
 
     private static ModelSummary? FindRegistryInfo(ModelRegistry registry, string modelId)

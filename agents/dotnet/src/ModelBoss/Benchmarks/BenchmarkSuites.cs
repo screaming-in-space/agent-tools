@@ -26,6 +26,29 @@ public static class BenchmarkSuites
     ];
 
     /// <summary>
+    /// Returns prompts for a given category name, or all prompts if the category
+    /// is null, empty, or "all". Unknown categories also return all prompts.
+    /// </summary>
+    public static IReadOnlyList<BenchmarkPrompt> GetByCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category) || string.Equals(category, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return All();
+        }
+
+        return category.ToLowerInvariant() switch
+        {
+            "instruction_following" => InstructionFollowing(),
+            "extraction" => Extraction(),
+            "markdown_generation" => MarkdownGeneration(),
+            "reasoning" => Reasoning(),
+            "multi_turn" => MultiTurn(),
+            "context_window" => ContextWindow(),
+            _ => All(),
+        };
+    }
+
+    /// <summary>
     /// Returns prompts filtered by maximum difficulty level.
     /// Level 1 returns only basic prompts; Level 2 includes Level 1 + Level 2, etc.
     /// </summary>
@@ -42,6 +65,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "strict_format_json",
+            Description = "Tests whether the model returns pure JSON with no preamble or markdown fencing.",
             Category = "instruction_following",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = "You are a data extraction assistant. Respond ONLY with valid JSON. No explanation, no markdown, no preamble.",
@@ -62,6 +86,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "constrained_list",
+            Description = "Tests whether the model produces exactly 3 bullet points with no intro or conclusion.",
             Category = "instruction_following",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = "Respond with exactly 3 bullet points. No introduction. No conclusion. Just 3 bullets starting with '- '.",
@@ -78,6 +103,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "stop_when_told",
+            Description = "Tests whether the model stops after one sentence and writes DONE with nothing after.",
             Category = "instruction_following",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = """
@@ -99,6 +125,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "minimal_prompt_json",
+            Description = "Tests JSON extraction with a terse system prompt — no hand-holding, model must infer format.",
             Category = "instruction_following",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = "JSON only.",
@@ -117,6 +144,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "multi_constraint",
+            Description = "Tests compliance with 5 simultaneous constraints: paragraph count, prefixes, word limit, forbidden words.",
             Category = "instruction_following",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = """
@@ -141,6 +169,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "negative_instruction",
+            Description = "Tests adherence to negative constraints: no markdown, no sentences starting with 'The', max 3 sentences.",
             Category = "instruction_following",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = """
@@ -172,6 +201,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "extract_model_specs",
+            Description = "Tests structured data extraction from prose into a markdown table with specific columns.",
             Category = "extraction",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = "Extract model specifications into a markdown table with columns: Model, Parameters, Architecture, VRAM (Q4). No other text.",
@@ -193,6 +223,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "extract_key_value",
+            Description = "Tests extraction of key-value pairs from natural language into structured lines.",
             Category = "extraction",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = "Extract all key-value pairs as `key: value` lines. One per line. No other text.",
@@ -214,6 +245,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "extract_from_noise",
+            Description = "Tests extraction of error messages from noisy log output, filtering timestamps and log levels.",
             Category = "extraction",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = "Extract ONLY the error messages from the log. Return one per line, no timestamps, no log levels, no other text.",
@@ -240,6 +272,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "extract_nested_json",
+            Description = "Tests conversion of indented text hierarchy to valid nested JSON without code fences.",
             Category = "extraction",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = "Respond with valid JSON only. No markdown code fences. No explanation.",
@@ -274,6 +307,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "generate_context_map",
+            Description = "Tests generation of a structured markdown context map with required sections and file index table.",
             Category = "markdown_generation",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = """
@@ -303,6 +337,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "generate_table",
+            Description = "Tests generation of a clean markdown comparison table with no surrounding text.",
             Category = "markdown_generation",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = "Respond with a markdown table only. No text before or after the table.",
@@ -333,6 +368,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "model_selection_reasoning",
+            Description = "Tests model selection reasoning given GPU VRAM constraints and model requirements.",
             Category = "reasoning",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = """
@@ -361,6 +397,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "comparative_analysis",
+            Description = "Tests trade-off analysis between a dense high-quality model and a fast MoE model for agent workflows.",
             Category = "reasoning",
             Difficulty = BenchmarkDifficulty.Level1,
             SystemMessage = "Compare the two items. State which is better for the given use case and why. Be concise.",
@@ -385,6 +422,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "quantitative_reasoning",
+            Description = "Tests step-by-step calculation of total agent task time from tok/s, TTFT, and tool call counts.",
             Category = "reasoning",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = """
@@ -411,6 +449,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "multi_step_deduction",
+            Description = "Tests logical deduction from a set of relational constraints about speed and accuracy.",
             Category = "reasoning",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = """
@@ -450,6 +489,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "mt_refine_output",
+            Description = "Tests whether the model can modify a table by adding a row while keeping existing rows unchanged.",
             Category = "multi_turn",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = "You are a technical documentation assistant. Follow instructions precisely. No preamble.",
@@ -494,6 +534,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "mt_context_retention",
+            Description = "Tests whether the model retains numerical facts across turns and reasons about trade-offs.",
             Category = "multi_turn",
             Difficulty = BenchmarkDifficulty.Level2,
             SystemMessage = "You are a performance analyst. Be precise with numbers. No preamble.",
@@ -538,6 +579,7 @@ public static class BenchmarkSuites
         new BenchmarkPrompt
         {
             Name = "mt_instruction_shift",
+            Description = "Tests adaptation when the output format changes between turns (numbered list to JSON array).",
             Category = "multi_turn",
             Difficulty = BenchmarkDifficulty.Level3,
             SystemMessage = "Follow instructions exactly. Output format changes between turns.",
@@ -592,6 +634,7 @@ public static class BenchmarkSuites
         // Embed a specific fact in generated padding text, ask the model to retrieve it.
         prompts.Add(BuildNeedleInHaystack(
             name: "niah_4k",
+            description: "Needle-in-haystack: finds a secret passphrase buried in ~4K tokens of technical padding.",
             difficulty: BenchmarkDifficulty.Level2,
             paddingParagraphs: 20,
             needlePosition: 0.5,
@@ -602,6 +645,7 @@ public static class BenchmarkSuites
 
         prompts.Add(BuildNeedleInHaystack(
             name: "niah_8k",
+            description: "Needle-in-haystack: finds a specific tok/s number buried in ~8K tokens at the 30% position.",
             difficulty: BenchmarkDifficulty.Level3,
             paddingParagraphs: 40,
             needlePosition: 0.3,
@@ -629,6 +673,7 @@ public static class BenchmarkSuites
 
     private static BenchmarkPrompt BuildNeedleInHaystack(
         string name,
+        string description,
         BenchmarkDifficulty difficulty,
         int paddingParagraphs,
         double needlePosition,
@@ -642,6 +687,7 @@ public static class BenchmarkSuites
         return new BenchmarkPrompt
         {
             Name = name,
+            Description = description,
             Category = "context_window",
             Difficulty = difficulty,
             SystemMessage = "Answer the question based ONLY on the provided context. Be concise. No preamble.",
@@ -693,6 +739,7 @@ public static class BenchmarkSuites
         return new BenchmarkPrompt
         {
             Name = "niah_multi_key",
+            Description = "Multi-key retrieval: finds 3 configuration values scattered across padding paragraphs.",
             Category = "context_window",
             Difficulty = difficulty,
             SystemMessage = "Answer the question using ONLY the provided context. List each value on its own line. No other text.",
@@ -743,6 +790,7 @@ public static class BenchmarkSuites
         return new BenchmarkPrompt
         {
             Name = "ruler_variable_tracking",
+            Description = "Variable tracking: identifies the final value of a setting that changes 4 times across the context.",
             Category = "context_window",
             Difficulty = difficulty,
             SystemMessage = "Answer based ONLY on the provided context. State only the final value. No explanation.",

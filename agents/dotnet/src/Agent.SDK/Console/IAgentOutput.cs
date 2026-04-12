@@ -11,6 +11,9 @@ public sealed record AgentRunSummary(
     string FullOutputPath,
     bool Success);
 
+/// <summary>Lightweight accuracy check result for UI display (SDK-level, no ModelBoss dependency).</summary>
+public sealed record TestCheckResult(string Name, double Score, string Detail);
+
 // ── Interface ──────────────────────────────────────────────────────────
 
 /// <summary>
@@ -36,6 +39,21 @@ public interface IAgentOutput : IDisposable
 
     Task StopAsync(AgentRunSummary summary, CancellationToken ct = default);
     Task WriteResponseAsync(string text);
+
+    // ── V2: Benchmark lifecycle (default implementations for backward compatibility) ──
+
+    /// <summary>Reports that a benchmark test is starting.</summary>
+    Task ReportTestStartedAsync(string promptName, string category, string description, string modelId)
+        => Task.CompletedTask;
+
+    /// <summary>Reports that a benchmark test has completed with results.</summary>
+    Task ReportTestCompletedAsync(string promptName, double tokensPerSecond, TimeSpan ttft,
+        double accuracyScore, bool passed, IReadOnlyList<TestCheckResult> checks)
+        => Task.CompletedTask;
+
+    /// <summary>Reports an error to the UI.</summary>
+    Task ReportErrorAsync(string source, string message)
+        => Task.CompletedTask;
 }
 
 // ── Static Accessor ────────────────────────────────────────────────────
@@ -50,11 +68,13 @@ public static class AgentConsole
 
     public static IAgentOutput Output => _output;
 
-    public static void Configure(bool headless = false)
+    public static void Configure(bool headless = false, bool channelMode = false)
     {
         // Fall back to plain output if stdout is redirected (piped, CI, etc.)
         _output = headless || System.Console.IsOutputRedirected
             ? new PlainAgentOutput()
-            : new SpectreAgentOutput();
+            : channelMode
+                ? new ChannelAgentOutput()
+                : new SpectreAgentOutput();
     }
 }

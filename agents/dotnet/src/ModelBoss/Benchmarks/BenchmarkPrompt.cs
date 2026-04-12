@@ -31,6 +31,9 @@ public sealed record BenchmarkPrompt
     /// <summary>Category for grouping (e.g. "instruction_following", "extraction", "tool_calling").</summary>
     public required string Category { get; init; }
 
+    /// <summary>Human-readable description of what this benchmark tests.</summary>
+    public string Description { get; init; } = "";
+
     /// <summary>Difficulty level for progressive testing. Models failing ≥90% at a level skip harder ones.</summary>
     public BenchmarkDifficulty Difficulty { get; init; } = BenchmarkDifficulty.Level1;
 
