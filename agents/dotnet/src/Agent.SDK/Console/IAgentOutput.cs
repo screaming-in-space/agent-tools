@@ -43,12 +43,17 @@ public interface IAgentOutput : IDisposable
     // ── V2: Benchmark lifecycle (default implementations for backward compatibility) ──
 
     /// <summary>Reports that a benchmark test is starting.</summary>
-    Task ReportTestStartedAsync(string promptName, string category, string description, string modelId)
+    Task ReportTestStartedAsync(string promptName, string category, string description, int difficultyLevel, string modelId)
         => Task.CompletedTask;
 
     /// <summary>Reports that a benchmark test has completed with results.</summary>
     Task ReportTestCompletedAsync(string promptName, double tokensPerSecond, TimeSpan ttft,
         double accuracyScore, bool passed, IReadOnlyList<TestCheckResult> checks)
+        => Task.CompletedTask;
+
+    /// <summary>Reports a per-model scorecard summary after all prompts complete.</summary>
+    Task ReportModelSummaryAsync(string configKey, string modelId, double compositeScore,
+        double meanAccuracy, double medianTokS, double passRate, int passed, int total)
         => Task.CompletedTask;
 
     /// <summary>Reports an error to the UI.</summary>

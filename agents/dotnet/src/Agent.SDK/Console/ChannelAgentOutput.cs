@@ -123,10 +123,10 @@ public sealed class ChannelAgentOutput : IAgentOutput
         return Task.CompletedTask;
     }
 
-    public Task ReportTestStartedAsync(string promptName, string category, string description, string modelId)
+    public Task ReportTestStartedAsync(string promptName, string category, string description, int difficultyLevel, string modelId)
     {
         _writer.TryWrite(new TestStartedMessage(
-            promptName, category, description, 0, modelId, DateTimeOffset.Now));
+            promptName, category, description, difficultyLevel, modelId, DateTimeOffset.Now));
         return Task.CompletedTask;
     }
 
@@ -135,6 +135,15 @@ public sealed class ChannelAgentOutput : IAgentOutput
     {
         _writer.TryWrite(new TestCompletedMessage(
             promptName, tokensPerSecond, ttft, accuracyScore, passed, checks, DateTimeOffset.Now));
+        return Task.CompletedTask;
+    }
+
+    public Task ReportModelSummaryAsync(string configKey, string modelId, double compositeScore,
+        double meanAccuracy, double medianTokS, double passRate, int passed, int total)
+    {
+        _writer.TryWrite(new ModelSummaryMessage(
+            configKey, modelId, compositeScore, meanAccuracy, medianTokS, passRate,
+            passed, total, DateTimeOffset.Now));
         return Task.CompletedTask;
     }
 
@@ -157,6 +166,11 @@ public sealed class ChannelAgentOutput : IAgentOutput
             catch (OperationCanceledException)
             {
                 // Expected on shutdown
+            }
+            catch (Exception ex)
+            {
+                // Renderer failure should not crash the agent — log and continue
+                Serilog.Log.Error(ex, "Channel renderer failed: {Message}", ex.Message);
             }
         }
 

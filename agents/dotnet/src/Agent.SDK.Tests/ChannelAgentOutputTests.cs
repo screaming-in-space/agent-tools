@@ -37,7 +37,7 @@ public class ChannelAgentOutputTests : IDisposable
     [Fact]
     public async Task ReportTestStartedAsync_DoesNotThrow()
     {
-        await _output.ReportTestStartedAsync("test_prompt", "category", "description", "model-id");
+        await _output.ReportTestStartedAsync("test_prompt", "category", "description", 1, "model-id");
     }
 
     [Fact]

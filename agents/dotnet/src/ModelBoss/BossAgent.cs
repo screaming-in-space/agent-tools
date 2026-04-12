@@ -128,7 +128,7 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                         ct.ThrowIfCancellationRequested();
 
                         await output.ReportTestStartedAsync(
-                            prompt.Name, prompt.Category, prompt.Description, modelOptions.Model);
+                            prompt.Name, prompt.Category, prompt.Description, (int)prompt.Difficulty, modelOptions.Model);
 
                         var runs = await runner.RunAsync(prompt, runOptions, ct);
                         benchResults[prompt.Name] = runs;
@@ -164,6 +164,12 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                     initialScorecards.Add(scorecard);
 
                     benchSw.Stop();
+
+                    await output.ReportModelSummaryAsync(
+                        configKey, modelOptions.Model, scorecard.CompositeScore,
+                        scorecard.MeanAccuracyScore, scorecard.MedianTokensPerSecond,
+                        scorecard.PassRate, scorecard.PromptsPassedCount, scorecard.TotalPromptsCount);
+
                     await output.ScannerCompletedAsync($"Benchmark: {configKey}", benchSw.Elapsed, success: true);
 
                     Logger.LogInformation(

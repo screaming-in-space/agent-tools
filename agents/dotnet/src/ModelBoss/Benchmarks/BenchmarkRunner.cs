@@ -36,11 +36,11 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
 
             if (prompt.IsMultiTurn)
             {
-                await ExecuteMultiTurnAsync(client, prompt, options.ModelOptions, ct);
+                await ExecuteMultiTurnAsync(client, prompt, options.ModelOptions, ct, suppressOutput: true);
             }
             else
             {
-                await ExecuteSingleAsync(client, prompt, options.ModelOptions, ct);
+                await ExecuteSingleAsync(client, prompt, options.ModelOptions, ct, suppressOutput: true);
             }
         }
 
@@ -92,7 +92,7 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
             if (output is not null)
             {
                 await output.ReportTestStartedAsync(
-                    prompt.Name, prompt.Category, prompt.Description, options.ModelOptions.Model);
+                    prompt.Name, prompt.Category, prompt.Description, (int)prompt.Difficulty, options.ModelOptions.Model);
             }
 
             var promptResults = await RunAsync(prompt, options, ct);
@@ -106,7 +106,8 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
         IChatClient client,
         BenchmarkPrompt prompt,
         Agent.SDK.Configuration.AgentModelOptions modelOptions,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool suppressOutput = false)
     {
         var messages = new List<ChatMessage>
         {
@@ -120,7 +121,7 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
         timeoutCts.CancelAfter(prompt.Timeout);
         var promptCt = timeoutCts.Token;
 
-        var tracker = new StreamingTokenTracker(output);
+        var tracker = new StreamingTokenTracker(suppressOutput ? null : output);
 
         try
         {
@@ -169,7 +170,8 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
         IChatClient client,
         BenchmarkPrompt prompt,
         Agent.SDK.Configuration.AgentModelOptions modelOptions,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool suppressOutput = false)
     {
         var messages = new List<ChatMessage>
         {
@@ -182,7 +184,7 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
         timeoutCts.CancelAfter(prompt.Timeout);
         var promptCt = timeoutCts.Token;
 
-        var tracker = new StreamingTokenTracker(output);
+        var tracker = new StreamingTokenTracker(suppressOutput ? null : output);
         var totalInputTokens = EstimateTokens(prompt.SystemMessage);
 
         try

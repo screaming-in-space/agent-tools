@@ -47,6 +47,12 @@ public sealed record JudgeResultMessage(
     string ModelId, string PromptName, int Score,
     string Reasoning, DateTimeOffset Timestamp) : UIMessage(Timestamp);
 
+/// <summary>Per-model scorecard summary after all prompts complete.</summary>
+public sealed record ModelSummaryMessage(
+    string ConfigKey, string ModelId, double CompositeScore,
+    double MeanAccuracy, double MedianTokS, double PassRate,
+    int Passed, int Total, DateTimeOffset Timestamp) : UIMessage(Timestamp);
+
 /// <summary>The LLM-as-judge phase is starting.</summary>
 public sealed record JudgePhaseStartedMessage(
     string JudgeModelId, int ModelsToJudge, DateTimeOffset Timestamp) : UIMessage(Timestamp);
