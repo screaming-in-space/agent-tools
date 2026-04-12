@@ -118,15 +118,22 @@ public sealed record BossAgent(ILoggerFactory LoggerFactory, IConfiguration Conf
                         MeasuredIterations = iterations,
                     };
 
-                    var benchResults = await runner.RunSuiteAsync(prompts, runOptions, ct);
-
-                    // Score accuracy and collect raw outputs
+                    // Run each prompt individually so we can score + report per-prompt in real-time
+                    var benchResults = new Dictionary<string, IReadOnlyList<BenchmarkResult>>(prompts.Count);
                     var accuracyResults = new Dictionary<string, AccuracyResult>();
                     var rawOutputs = new Dictionary<string, string>();
 
                     foreach (var prompt in prompts)
                     {
-                        if (benchResults.TryGetValue(prompt.Name, out var runs) && runs.Count > 0)
+                        ct.ThrowIfCancellationRequested();
+
+                        await output.ReportTestStartedAsync(
+                            prompt.Name, prompt.Category, prompt.Description, modelOptions.Model);
+
+                        var runs = await runner.RunAsync(prompt, runOptions, ct);
+                        benchResults[prompt.Name] = runs;
+
+                        if (runs.Count > 0)
                         {
                             var lastRun = runs[^1];
                             var accuracy = AccuracyScorer.Score(

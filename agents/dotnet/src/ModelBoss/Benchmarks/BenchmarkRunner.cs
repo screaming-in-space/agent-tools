@@ -88,6 +88,13 @@ public sealed class BenchmarkRunner(ILogger<BenchmarkRunner> logger, IAgentOutpu
             ct.ThrowIfCancellationRequested();
 
             logger.LogInformation("── Benchmark: {PromptName} ({Category}) ──", prompt.Name, prompt.Category);
+
+            if (output is not null)
+            {
+                await output.ReportTestStartedAsync(
+                    prompt.Name, prompt.Category, prompt.Description, options.ModelOptions.Model);
+            }
+
             var promptResults = await RunAsync(prompt, options, ct);
             results[prompt.Name] = promptResults;
         }

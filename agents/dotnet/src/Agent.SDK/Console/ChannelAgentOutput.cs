@@ -146,7 +146,7 @@ public sealed class ChannelAgentOutput : IAgentOutput
 
     public async Task StopAsync(AgentRunSummary summary, CancellationToken ct = default)
     {
-        _writer.Complete();
+        _writer.TryComplete();
 
         if (_renderTask is not null)
         {
