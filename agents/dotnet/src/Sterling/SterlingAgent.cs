@@ -5,6 +5,7 @@ using Agent.SDK.Configuration;
 using Agent.SDK.Console;
 using Agent.SDK.Telemetry;
 using Agent.SDK.Tools;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -15,8 +16,8 @@ using Sterling.Tools;
 namespace Sterling;
 
 /// <summary>
-/// Core agent: resolves CLI options, builds one M.E.AI pipeline,
-/// makes one <see cref="IChatClient.GetResponseAsync"/> call, done.
+/// CLI entry point: resolves options, builds a <see cref="ChatClientAgent"/>,
+/// runs it once, and reports the result.
 /// </summary>
 public record SterlingAgent(ILogger<SterlingAgent> Logger, IConfiguration Configuration)
 {
@@ -62,40 +63,10 @@ public record SterlingAgent(ILogger<SterlingAgent> Logger, IConfiguration Config
 
         await output.UpdateStatusAsync($"Endpoint healthy — {health.LoadedModels.Count} model(s) loaded");
 
-        // ── Build tools ────────────────────────────────────────────────
+        // ── Build + run ────────────────────────────────────────────────
 
-        var fileTools = new FileTools(targetPath);
-        var qualityTools = new QualityTools(fileTools);
-        var sterlingTools = new SterlingTools(fileTools, qualityTools);
-
-        var tools = new AITool[]
-        {
-            AIFunctionFactory.Create(sterlingTools.ListSourceFiles),
-            AIFunctionFactory.Create(sterlingTools.AnalyzeFile),
-            AIFunctionFactory.Create(sterlingTools.ReadFile),
-            AIFunctionFactory.Create(sterlingTools.WriteReport),
-        };
-
-        // ── Build pipeline ─────────────────────────────────────────────
-
-        using var loggerFactory = LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning));
-
-        var clientOptions = new OpenAIClientOptions
-        {
-            Endpoint = new Uri(modelOptions.Endpoint),
-            NetworkTimeout = TimeSpan.FromMinutes(10),
-        };
-
-        var chatClient = new OpenAIClient(new ApiKeyCredential(modelOptions.ApiKey), clientOptions)
-            .GetChatClient(string.IsNullOrEmpty(modelOptions.Model) ? "local" : modelOptions.Model)
-            .AsIChatClient();
-
-        var agent = new ChatClientBuilder(chatClient)
-            .UseOpenTelemetry(loggerFactory, sourceName: SterlingTrace.Instance.Source.Name)
-            .UseFunctionInvocation(loggerFactory, c => c.MaximumIterationsPerRequest = 50)
-            .Build();
-
-        // ── Run ────────────────────────────────────────────────────────
+        var chatClient = CreateChatClient(modelOptions);
+        var agent = BuildAgent(chatClient, targetPath, outputPath);
 
         var stopwatch = Stopwatch.StartNew();
         using var span = SterlingTrace.Instance.StartSpan("agent-run", ActivityKind.Client);
@@ -105,13 +76,9 @@ public record SterlingAgent(ILogger<SterlingAgent> Logger, IConfiguration Config
         {
             await output.StartAsync("Sterling", ct);
 
-            var response = await agent.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, SystemPrompt.Build(targetPath, outputPath)),
-                    new ChatMessage(ChatRole.User, $"Review the C# codebase in: {targetPath}"),
-                ],
-                new ChatOptions { Tools = tools },
-                ct);
+            await agent.RunAsync(
+                $"Review the C# codebase in: {targetPath}",
+                cancellationToken: ct);
 
             stopwatch.Stop();
             SterlingMetrics.RunDuration.Record(stopwatch.Elapsed.TotalSeconds);
@@ -129,5 +96,49 @@ public record SterlingAgent(ILogger<SterlingAgent> Logger, IConfiguration Config
             Logger.LogError(ex, "Sterling run failed");
             return 1;
         }
+    }
+
+    // ── Reusable agent construction ────────────────────────────────────
+
+    /// <summary>
+    /// Builds a MAF <see cref="ChatClientAgent"/> with Sterling's tools and prompt.
+    /// Usable from both the CLI path and the <see cref="SterlingExecutor"/>.
+    /// </summary>
+    public static AIAgent BuildAgent(IChatClient chatClient, string targetPath, string outputPath)
+    {
+        var fileTools = new FileTools(targetPath);
+        var qualityTools = new QualityTools(fileTools);
+        var sterlingTools = new SterlingTools(fileTools, qualityTools);
+
+        AITool[] tools =
+        [
+            AIFunctionFactory.Create(sterlingTools.ListSourceFiles),
+            AIFunctionFactory.Create(sterlingTools.AnalyzeFile),
+            AIFunctionFactory.Create(sterlingTools.ReadFile),
+            AIFunctionFactory.Create(sterlingTools.WriteReport),
+        ];
+
+        return new ChatClientAgent(
+            chatClient,
+            name: "Sterling",
+            instructions: SystemPrompt.Build(targetPath, outputPath),
+            tools: tools);
+    }
+
+    /// <summary>
+    /// Creates an <see cref="IChatClient"/> from model options.
+    /// Separated so the executor can build its own client if needed.
+    /// </summary>
+    public static IChatClient CreateChatClient(AgentModelOptions options)
+    {
+        var clientOptions = new OpenAIClientOptions
+        {
+            Endpoint = new Uri(options.Endpoint),
+            NetworkTimeout = TimeSpan.FromMinutes(10),
+        };
+
+        return new OpenAIClient(new ApiKeyCredential(options.ApiKey), clientOptions)
+            .GetChatClient(string.IsNullOrEmpty(options.Model) ? "local" : options.Model)
+            .AsIChatClient();
     }
 }
