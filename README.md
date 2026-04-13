@@ -42,11 +42,14 @@ All commands run from the **repo root** (`agent-tools/`).
 Scans a git repo and produces structured context files (MAP.md, RULES.md, STRUCTURE.md, QUALITY.md, JOURNAL.md) for LLM consumption.
 
 ```bash
-# Scan the current repo with the default model and interactive UI
+# Scan the current repo with the default model — interactive Spectre tree UI
 dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- .
 
-# Scan a different repo in headless mode
-dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- /path/to/repo --headless
+# Scan a different repo
+dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- /path/to/repo
+
+# Headless mode (CI, piping)
+dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- . --headless
 
 # Use a specific model config and only run selected scanners
 dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- . --config-key gemma --scan markdown,structure,rules
@@ -68,21 +71,26 @@ dotnet run --project agents/dotnet/src/CrimeSceneInvestigator -- . --model gemma
 Benchmarks local LLM models with hybrid scoring: deterministic accuracy checks plus an LLM-as-judge quality pass (MT-Bench inspired). Supports single-turn, multi-turn conversation, and RULER-inspired context-window benchmarks. Produces ranked scorecards with composite scores.
 
 ```bash
-# Benchmark all configured models with interactive Spectre UI
+# Benchmark all configured models — interactive panel UI with streaming tokens
 dotnet run --project agents/dotnet/src/ModelBoss
 
-# Headless mode — good for CI or piping output
-dotnet run --project agents/dotnet/src/ModelBoss -- --headless
+# Quick single-model smoke test (1 category, 1 iteration)
+dotnet run --project agents/dotnet/src/ModelBoss -- --models default --category instruction_following --iterations 1
 
-# Benchmark only two specific models
+# Benchmark two models head-to-head
 dotnet run --project agents/dotnet/src/ModelBoss -- --models default,gemma-26b
 
 # Run just the reasoning suite with 5 iterations
 dotnet run --project agents/dotnet/src/ModelBoss -- --category reasoning --iterations 5
 
+# Headless mode — good for CI or piping output
+dotnet run --project agents/dotnet/src/ModelBoss -- --headless
+
 # Write results to a custom directory
 dotnet run --project agents/dotnet/src/ModelBoss -- --output ./my-results --headless
 ```
+
+The interactive UI renders a panel per test showing the model's thinking process, response output, accuracy checks, and metrics. Each model gets a scorecard summary at the end. When benchmarking 2+ models, the best-performing model serves as an LLM-as-judge to evaluate the others.
 
 | Option | Description |
 |--------|-------------|
@@ -134,9 +142,19 @@ Add as many model sections as needed — the `embedding` key is excluded from be
 ### Build & test
 
 ```bash
+# Build everything
 dotnet build
-dotnet test
+
+# Run unit tests (xUnit v3 — test projects are self-hosting executables)
+dotnet run --project agents/dotnet/src/Agent.SDK.Tests
+dotnet run --project agents/dotnet/src/CrimeSceneInvestigator.Tests
+dotnet run --project agents/dotnet/src/ModelBoss.Tests
+
+# Run only ModelBoss unit tests (skips integration tests that need LM Studio)
+dotnet run --project agents/dotnet/src/ModelBoss.Tests -- -trait "Category!=Integration"
 ```
+
+Tests use **xUnit v3** (`xunit.v3 3.2.2`). Integration tests in `ModelBoss.Tests` require LM Studio running with `unsloth/nvidia-nemotron-3-nano-4b` loaded — they skip automatically via `Assert.Skip` when the endpoint is unreachable.
 
 ## Skills
 

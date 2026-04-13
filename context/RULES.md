@@ -28,7 +28,7 @@ These apply everywhere. No exceptions.
 - Serilog 4.3.1 + Serilog.Sinks.Console 6.1.1 + Serilog.Settings.Configuration 10.0.0 for structured logging
 - Microsoft.Extensions.Configuration.Json 10.0.5 for `appsettings.json` loading
 - `System.Diagnostics.ActivitySource` / `System.Diagnostics.Metrics.Meter` for telemetry (BCL, no OTel SDK export for CLI)
-- xUnit 2.9.3 + NSubstitute 5.3.0 for testing
+- xUnit v3 3.2.2 + NSubstitute 5.3.0 for testing
 - No Aspire - agents run standalone against any OpenAI-compatible endpoint
 
 ---
@@ -225,7 +225,7 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 
 - **`Directory.Build.props`** - Centralized `net10.0`, nullable, implicit usings, `<Version>`. Do not duplicate in csproj files.
 - **`Directory.Packages.props`** - Central Package Management. All NuGet versions live here. Individual csproj files use `<PackageReference Include="..." />` without `Version`.
-- **`Test.Build.props`** - Auto-imported for `*.Tests` projects. Provides xUnit, NSubstitute, coverlet, Test SDK. Do not add test packages manually.
+- **`Test.Build.props`** - Auto-imported for `*.Tests` projects. Provides xUnit v3, NSubstitute, coverlet, `OutputType=Exe`, `SelfContained=true`. Do not add test packages manually.
 - **`global.json`** - Pins .NET SDK version with `rollForward: latestMinor`.
 - **`.editorconfig`** - Enforces indent style, braces (`true:error`), file-scoped namespaces, `var` preference, using placement.
 - **`nuget.config`** - Package source mapping. Isolated from global feeds.
@@ -237,7 +237,8 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 
 ### Conventions
 
-- **xUnit + NSubstitute.** `Assert.*` assertions. No FluentAssertions unless already present.
+- **xUnit v3 + NSubstitute.** `Assert.*` assertions. No FluentAssertions unless already present.
+- **xUnit v3 specifics:** Test projects are `OutputType=Exe` (self-hosting). Run via `dotnet run --project`, not `dotnet test`. `IAsyncLifetime` methods return `ValueTask`. Use `Assert.Skip(reason)` for runtime skip (e.g., endpoint not available).
 - **One test class per production class.** `FileTools` → `FileToolsTests`, `SystemPrompt` → `SystemPromptTests`.
 - **Naming:** `MethodName_Condition_ExpectedBehavior` (e.g., `ListMarkdownFiles_EmptyDirectory_ReportsNone`).
 - **Test project:** `[AgentName].Tests` - auto-wired by `Test.Build.props`.
@@ -248,7 +249,8 @@ Telemetry uses BCL types directly (`System.Diagnostics.ActivitySource`, `System.
 - **Tools:** Exercise every tool method with valid inputs, edge cases, and error paths (path traversal, missing files, empty directories).
 - **System prompts:** Verify the built prompt contains expected tool names, output format markers, and runtime parameters.
 - **Path safety:** Dedicated tests that attempt directory traversal (`../../../etc/passwd`) and verify rejection.
-- **No LLM in tests.** Tools are pure functions. System prompts are string builders. Test them without an LLM endpoint.
+- **No LLM in unit tests.** Tools are pure functions. System prompts are string builders. Test them without an LLM endpoint.
+- **Integration tests:** Per-benchmark tests that run each prompt against a real model (e.g., nemotron-3-nano-4b). Require LM Studio running — skip via `Assert.Skip` when unavailable. One prompt per test, 1 iteration, 0 warmup. Functional assertions only (non-empty output, positive tok/s, positive duration).
 
 ### File System Tests
 

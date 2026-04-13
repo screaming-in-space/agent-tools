@@ -140,7 +140,8 @@ agents/dotnet/
 │       ├── AccuracyScorerTests.cs       # Accuracy scoring: substrings, structure, length, similarity, preamble, multi-turn
 │       ├── BenchmarkSuitesTests.cs      # Suite categories, unique names, prompt validation, multi-turn + context-window
 │       ├── LlmJudgeTests.cs            # Score parsing (bracket, labeled, trailing digit), NormalizedScore mapping
-│       └── ScorecardBuilderTests.cs     # Aggregation, composite formula, percentiles, pass rate, judge integration
+│       ├── ScorecardBuilderTests.cs     # Aggregation, composite formula, percentiles, pass rate, judge integration
+│       └── BenchmarkRunnerIntegrationTests.cs  # Per-prompt integration tests against LM Studio (nemotron, skip when unavailable)
 ├── .github/
 │   └── copilot-instructions.md         # Thin shim (workspace-scoped)
 ├── .editorconfig                       # Code style + analyzer severity overrides
@@ -162,7 +163,7 @@ Shared class library. Contains reusable infrastructure that every agent needs bu
 | `Configuration/EndpointHealthCheck.cs` | Static `ValidateAsync` calls `GET /v1/models` on the configured endpoint. Verifies reachability and that the configured model is loaded. Returns `HealthCheckResult` record. |
 | `Configuration/ModelRegistry.cs` | Compact model + GPU registry loaded from `context/models/_registry.json` and `context/gpu/_registry.json`. Records: `ModelRegistry`, `ModelEntry`, `GpuEntry`, `ScannerRatings`, `InferenceSettings`. Static `Load(repoRoot)` with graceful fallback to empty. |
 | `Console/IAgentOutput.cs` | `IAgentOutput` interface (scanner lifecycle, tool progress, thinking, summary, test lifecycle), `AgentRunSummary` record, `TestCheckResult` record, `AgentConsole` static accessor with `channelMode` option. |
-| `Console/UIMessage.cs` | 11 sealed record types for the Channel-based UI pipeline: `ThinkingTokenMessage`, `ResponseTokenMessage`, `TestStartedMessage`, `TestCompletedMessage`, `ModelPhaseStartedMessage/Completed`, `ErrorMessage`, `StatusMessage`, `JudgeResultMessage`, `JudgePhaseStartedMessage`. |
+| `Console/UIMessage.cs` | 12 sealed record types for the Channel-based UI pipeline: `ThinkingTokenMessage`, `ResponseTokenMessage`, `TestStartedMessage`, `TestCompletedMessage`, `ModelPhaseStartedMessage/Completed`, `ModelSummaryMessage`, `ErrorMessage`, `StatusMessage`, `JudgeResultMessage`, `JudgePhaseStartedMessage`. |
 | `Console/RingBuffer.cs` | Generic fixed-capacity circular buffer. `Add(T)`, `ToList()`, `Newest`. Drop-oldest on overflow. Single-threaded consumer. |
 | `Console/ChannelAgentOutput.cs` | `IAgentOutput` implementation writing `UIMessage` records to `Channel.CreateBounded<UIMessage>(2000, DropOldest)`. Maintains `ScannerTrace` list for REASONING.md. Never blocks producers. |
 | `Console/ChannelAgentRenderer.cs` | Spectre.Console renderer consuming from `ChannelReader<UIMessage>`. Vertically-extending panels — each test gets its own panel with streaming tokens, results, and checks. Model headers, error panels, judge results, and summary panel. |
@@ -284,15 +285,16 @@ Unit tests for ModelBoss benchmark engine, scoring, and LLM-as-judge.
 | `ScorecardBuilderTests.cs` | Aggregation: empty results, multi-prompt, failed benchmark exclusion, composite formula weights, speed normalization cap, pass rate, registry metadata preservation, judge integration. |
 | `BenchmarkSuitesTests.cs` | Suite integrity: all six categories present (instruction, extraction, markdown, reasoning, multi_turn, context_window), count matches sum-of-parts, unique names, non-empty messages, expected output, reasonable timeouts, minimum prompt counts. |
 | `LlmJudgeTests.cs` | `ParseScore` bracket `[[N]]` pattern, labeled `score: N` pattern, trailing digit fallback, priority ordering, clamping, edge cases (null, empty, no pattern). `JudgeResult.NormalizedScore` mapping (1→0.0, 10→1.0). |
+| `BenchmarkRunnerIntegrationTests.cs` | Per-prompt integration tests: 23 tests (one per benchmark prompt) against `unsloth/nvidia-nemotron-3-nano-4b` via LM Studio. Skips via `Assert.Skip` when endpoint unreachable or model not loaded. Functional assertions: positive duration, non-empty output, positive tok/s. |
 
-**Depends on:** ModelBoss (project ref), xUnit, NSubstitute (auto-imported via `Test.Build.props`)
+**Depends on:** ModelBoss (project ref), xUnit v3, NSubstitute (auto-imported via `Test.Build.props`)
 
 ## Conventions
 
 - **One agent, one project.** Each agent is a standalone console app in its own directory under `src/`.
 - **Agent.SDK is the exception.** Shared logging bootstrap, telemetry primitives, model configuration, console output, endpoint health checks, and reusable tools live here. Agent-specific logic never goes in the SDK — only plumbing that every agent would otherwise duplicate identically.
 - **Shared tools in `Agent.SDK.Tools`.** Generic tools (`FileTools`, `CodeCommentTools`, `GitTools`, `StructureTools`, `QualityTools`) that any agent can reuse. Agent-specific tools go in the agent's own `Tools/` directory. Registered via `AIFunctionFactory.Create` in scanner orchestration.
-- **Console output in `Agent.SDK.Console`.** `IAgentOutput` interface with headless (`PlainAgentOutput`) and interactive (`SpectreAgentOutput`) implementations. Log files, reasoning traces, and streaming interceptors live here.
+- **Console output in `Agent.SDK.Console`.** `IAgentOutput` interface with three implementations: headless (`PlainAgentOutput`), interactive tree (`SpectreAgentOutput` for CSI), and channel-based panels (`ChannelAgentOutput` + `ChannelAgentRenderer` for ModelBoss). The channel pipeline uses `Channel<UIMessage>` for thread-safe producer/consumer token streaming. Log files, reasoning traces, and streaming interceptors live here.
 - **Telemetry in `Telemetry/`.** Agent-specific `AgentTrace` instance + `Meter` class. Zero overhead when no listener is attached.
 - **System prompt is testable code.** Static `Build` method with runtime parameters. Unit-tested for expected content.
 - **Test auto-wiring.** Projects ending in `.Tests` automatically get test infrastructure via `Test.Build.props`.
