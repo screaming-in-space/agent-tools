@@ -111,6 +111,21 @@ agents/dotnet/
 │       ├── FallbackValidatorTests.cs    # IsSubstantiveMarkdown chatbot preamble detection
 │       ├── PlannerPromptTests.cs        # Scanner manifests, complexity ratings, model configs
 │       └── SystemPromptTests.cs         # Prompt content: tool names, output format, paths
+│   ├── Sterling/                         # Agent: thin code quality reviewer (Roslyn metrics + LLM editorial)
+│   │   ├── Telemetry/
+│   │   │   └── SterlingTelemetry.cs      # SterlingTrace (AgentTrace) + SterlingMetrics (Meter + duration)
+│   │   ├── Tools/
+│   │   │   └── SterlingTools.cs          # Four tools: ListSourceFiles, AnalyzeFile, ReadFile, WriteReport
+│   │   ├── AgentCommandSetup.cs          # System.CommandLine (positional directory, --config-key, --output, --headless)
+│   │   ├── SterlingAgent.cs              # One pipeline, one GetResponseAsync call, one report
+│   │   ├── SystemPrompt.cs               # Staff engineer persona with judgment categories
+│   │   ├── appsettings.json              # Model config
+│   │   ├── Sterling.csproj
+│   │   └── Program.cs                    # Thin bootstrap
+│   ├── Sterling.Tests/                   # Unit tests for Sterling tools and prompt
+│   │   ├── Sterling.Tests.csproj
+│   │   ├── SterlingToolsTests.cs         # All four tool methods: discovery, analysis, read, write
+│   │   └── SystemPromptTests.cs          # Prompt content: role, paths, judgment categories
 │   ├── ModelBoss/                       # Agent: benchmarks local LLMs and produces ranked scorecards
 │   │   ├── Benchmarks/
 │   │   │   ├── AccuracyResult.cs        # Accuracy assessment record with individual check breakdowns
@@ -245,6 +260,33 @@ Agent-specific tests for prompts, health check, and fallback validation.
 | `SystemPromptTests.cs` | Verifies built prompt contains tool names, output format, and runtime paths. |
 
 **Depends on:** CrimeSceneInvestigator (project ref), xUnit, NSubstitute (auto-imported via `Test.Build.props`)
+
+### Sterling
+
+Console agent. Thin code quality reviewer — runs deterministic Roslyn analysis on C# files and uses an LLM as a staff engineer to provide editorial judgment. Deliberately minimal: four tools, one system prompt, one `GetResponseAsync` call. Three of the four tools are one-line delegations to Agent.SDK. Sterling is the reference example of an agent that stays an agent instead of becoming a service.
+
+| File | Purpose |
+|------|---------|
+| `Program.cs` | Thin bootstrap: config, logging, CLI parse, flush. Identical pattern to CSI and ModelBoss. |
+| `AgentCommandSetup.cs` | System.CommandLine: positional `directory` arg, `--config-key`, `--output`, `--headless`. No scanner selection, no planner. |
+| `SterlingAgent.cs` | Record with `ILogger` + `IConfiguration`. Resolves CLI, validates endpoint, builds one M.E.AI pipeline, calls `GetResponseAsync` once. |
+| `SystemPrompt.cs` | Static `Build(targetPath, outputPath)`. Staff engineer persona with named judgment categories (naming, SRP, coupling, abstraction value, complexity budget, error handling, allocation patterns). |
+| `Tools/SterlingTools.cs` | Four tools: `ListSourceFiles` (file discovery excluding bin/obj), `AnalyzeFile` (delegates to `QualityTools.AnalyzeCSharpFile`), `ReadFile` (delegates to `FileTools.ReadFileContent`), `WriteReport` (delegates to `FileTools.WriteOutput`). |
+| `Telemetry/SterlingTelemetry.cs` | `SterlingTrace` (AgentTrace) + `SterlingMetrics` (run duration histogram). |
+| `appsettings.json` | Model config + Serilog overrides. |
+
+**Depends on:** Agent.SDK (project ref), Microsoft.Extensions.AI, Microsoft.Extensions.AI.OpenAI, Microsoft.Extensions.Configuration.Json, OpenAI, System.CommandLine
+
+### Sterling.Tests
+
+Unit tests for Sterling tools and system prompt.
+
+| File | Purpose |
+|------|---------|
+| `SterlingToolsTests.cs` | All four tool methods: file discovery (finds .cs, excludes bin/obj, empty dir, path safety), Roslyn analysis (valid file, missing file), file read (content, path traversal), report write (creation, path safety). |
+| `SystemPromptTests.cs` | Prompt content: target path, output path, staff engineer role, judgment categories. |
+
+**Depends on:** Sterling (project ref), xUnit v3, NSubstitute (auto-imported via `Test.Build.props`)
 
 ### ModelBoss
 

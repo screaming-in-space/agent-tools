@@ -31,4 +31,6 @@
   <Project Path="agents/dotnet/src/CrimeSceneInvestigator/CrimeSceneInvestigator.csproj" />
   <Project Path="agents/dotnet/src/ModelBoss/ModelBoss.csproj" />
   <Project Path="agents/dotnet/src/ModelBoss.Tests/ModelBoss.Tests.csproj" />
+  <Project Path="agents/dotnet/src/Sterling/Sterling.csproj" />
+  <Project Path="agents/dotnet/src/Sterling.Tests/Sterling.Tests.csproj" />
 </Solution>
