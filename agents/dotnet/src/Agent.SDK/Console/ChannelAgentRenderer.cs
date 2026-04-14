@@ -224,10 +224,10 @@ public sealed class ChannelAgentRenderer(ChannelReader<UIMessage> reader)
         };
 
         var details = new StringBuilder();
-        if (phase.ParamsB.HasValue) details.Append($"{phase.ParamsB:F1}B");
+        if (phase.ParamsB.HasValue) { details.Append($"{phase.ParamsB:F1}B"); }
         if (!string.IsNullOrEmpty(phase.Architecture))
         {
-            if (details.Length > 0) details.Append(" · ");
+            if (details.Length > 0) { details.Append(" · "); }
             details.Append(phase.Architecture);
         }
 

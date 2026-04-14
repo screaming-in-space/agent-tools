@@ -179,7 +179,7 @@ public class QualityTools
             try
             {
                 var content = File.ReadAllText(file);
-                if (content.Length > 500_000) continue;
+                if (content.Length > 500_000) { continue; }
 
                 var lines = content.Split('\n');
                 totalLines += lines.Length;
@@ -188,9 +188,13 @@ public class QualityTools
                 {
                     var trimmed = line.TrimStart();
                     if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith("///", StringComparison.Ordinal) || trimmed.StartsWith("/*", StringComparison.Ordinal) || trimmed.StartsWith('*'))
+                    {
                         commentLines++;
+                    }
                     else if (trimmed.Length > 0)
+                    {
                         codeLines++;
+                    }
                 }
 
                 var tree = CSharpSyntaxTree.ParseText(content);
@@ -266,7 +270,7 @@ public class QualityTools
         }
 
         var content = File.ReadAllText(resolved);
-        if (content.Length > 200_000) content = content[..200_000];
+        if (content.Length > 200_000) { content = content[..200_000]; }
 
         var lines = content.Split('\n');
         var rel = Path.GetRelativePath(_fileTools.RootDirectory, resolved).Replace('\\', '/');
@@ -289,20 +293,26 @@ public class QualityTools
             // Comment detection
             if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('#') || trimmed.StartsWith("--", StringComparison.Ordinal) ||
                 trimmed.StartsWith("/*", StringComparison.Ordinal) || trimmed.StartsWith('*') || trimmed.StartsWith("///", StringComparison.Ordinal))
+            {
                 commentCount++;
+            }
 
             // TODO/FIXME
             if (Regex.IsMatch(line, @"\b(TODO|FIXME|HACK|XXX)\b", RegexOptions.IgnoreCase))
+            {
                 todoCount++;
+            }
 
             // Long lines
             if (line.TrimEnd().Length > 120)
+            {
                 longLineCount++;
+            }
 
             // Nesting (rough: count leading indent)
             var indent = line.Length - line.TrimStart().Length;
             var nestLevel = indent / 4; // assume 4-space indent
-            if (nestLevel > maxNesting) maxNesting = nestLevel;
+            if (nestLevel > maxNesting) { maxNesting = nestLevel; }
         }
 
         var codeLines = totalLines - blankLines - commentCount;
@@ -329,11 +339,11 @@ public class QualityTools
 
         // Grade
         var issues = 0;
-        if (longLineCount > 5) issues++;
-        if (maxNesting > 6) issues++;
-        if (magicNumbers > 10) issues++;
-        if (todoCount > 5) issues++;
-        if (commentRatio < 2 && codeLines > 100) issues++;
+        if (longLineCount > 5) { issues++; }
+        if (maxNesting > 6) { issues++; }
+        if (magicNumbers > 10) { issues++; }
+        if (todoCount > 5) { issues++; }
+        if (commentRatio < 2 && codeLines > 100) { issues++; }
 
         var grade = issues switch
         {
@@ -374,7 +384,7 @@ public class QualityTools
             }
 
             var parent = Directory.GetParent(dir)?.FullName;
-            if (parent == dir) break;
+            if (parent == dir) { break; }
             dir = parent;
         }
 
@@ -452,13 +462,13 @@ public class QualityTools
     {
         var issues = 0;
 
-        if (lines > 500) issues++;
-        if (lines > 1000) issues++;
-        if (maxComplexity > 10) issues++;
-        if (maxComplexity > 20) issues++;
-        if (antiPatternCount > 0) issues++;
-        if (antiPatternCount > 3) issues++;
-        if (methodCount > 20) issues++;
+        if (lines > 500) { issues++; }
+        if (lines > 1000) { issues++; }
+        if (maxComplexity > 10) { issues++; }
+        if (maxComplexity > 20) { issues++; }
+        if (antiPatternCount > 0) { issues++; }
+        if (antiPatternCount > 3) { issues++; }
+        if (methodCount > 20) { issues++; }
 
         return issues switch
         {

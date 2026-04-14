@@ -47,10 +47,10 @@ internal sealed record ScannerPlanner(ILogger Logger, IConfiguration Configurati
 
         // Build enabled scanner list
         var enabledScanners = new List<string>();
-        if (scanOptions.ScanMarkdown) enabledScanners.Add("markdown");
-        if (scanOptions.ScanCodeComments) enabledScanners.Add("rules");
+        if (scanOptions.ScanMarkdown) { enabledScanners.Add("markdown"); }
+        if (scanOptions.ScanCodeComments) { enabledScanners.Add("rules"); }
         if (scanOptions.ScanCodePattern) { enabledScanners.Add("structure"); enabledScanners.Add("quality"); }
-        if (scanOptions.ScanGitHistory) enabledScanners.Add("journal");
+        if (scanOptions.ScanGitHistory) { enabledScanners.Add("journal"); }
         enabledScanners.Add("done"); // always runs
 
         await output.ScannerStartedAsync("Planner", context.ModelOptions.Model);
@@ -71,9 +71,14 @@ internal sealed record ScannerPlanner(ILogger Logger, IConfiguration Configurati
 
             var chatOptions = new ChatOptions();
             if (context.ModelOptions.Temperature.HasValue)
+            {
                 chatOptions.Temperature = context.ModelOptions.Temperature;
+            }
+
             if (context.ModelOptions.MaxOutputTokens.HasValue)
+            {
                 chatOptions.MaxOutputTokens = context.ModelOptions.MaxOutputTokens;
+            }
 
             var plannerBuf = new StringBuilder();
             await foreach (var update in agent.GetStreamingResponseAsync(messages, chatOptions, ct))
@@ -139,7 +144,7 @@ internal sealed record ScannerPlanner(ILogger Logger, IConfiguration Configurati
         try
         {
             var assignments = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonMatch);
-            if (assignments is null) return result;
+            if (assignments is null) { return result; }
 
             foreach (var (scanner, configKey) in assignments)
             {

@@ -195,7 +195,9 @@ public class CodeCommentTools
                 sb.AppendLine(c);
             }
             if (docComments.Count > 50)
+            {
                 sb.AppendLine($"... and {docComments.Count - 50} more");
+            }
             sb.AppendLine();
         }
 
@@ -207,7 +209,9 @@ public class CodeCommentTools
                 sb.AppendLine(c);
             }
             if (inlineComments.Count > 30)
+            {
                 sb.AppendLine($"... and {inlineComments.Count - 30} more");
+            }
             sb.AppendLine();
         }
 
@@ -256,7 +260,7 @@ public class CodeCommentTools
         foreach (var file in csFiles)
         {
             var content = ReadFileSafe(file);
-            if (content is null) continue;
+            if (content is null) { continue; }
 
             // DI registrations
             foreach (Match m in Regex.Matches(content, @"(?:builder|services|Services)\s*\.\s*(Add\w+)\s*[<(]"))
@@ -379,7 +383,10 @@ public class CodeCommentTools
                     inBlockComment = false;
                     var text = line[..(endIdx)].Trim().TrimStart('*').Trim();
                     if (text.Length > 0)
+                    {
                         docBlock.AppendLine(text);
+                    }
+
                     if (docBlock.Length > 0)
                     {
                         docComments.Add($"L{lineNum}: {docBlock.ToString().Trim()}");
@@ -390,7 +397,9 @@ public class CodeCommentTools
                 {
                     var text = line.TrimStart('*').Trim();
                     if (text.Length > 0)
+                    {
                         docBlock.AppendLine(text);
+                    }
                 }
                 CheckTodoFixme(line, lineNum, todoMarkers);
                 continue;
@@ -415,7 +424,10 @@ public class CodeCommentTools
                     // Single-line block comment
                     var text = line[(blockStart + 2)..blockEnd].Trim();
                     if (text.Length > 0)
+                    {
                         inlineComments.Add($"L{lineNum}: {text}");
+                    }
+
                     CheckTodoFixme(text, lineNum, todoMarkers);
                 }
                 else
@@ -423,7 +435,9 @@ public class CodeCommentTools
                     inBlockComment = true;
                     var text = line[(blockStart + 2)..].Trim();
                     if (text.Length > 0)
+                    {
                         docBlock.AppendLine(text);
+                    }
                 }
                 continue;
             }
@@ -466,7 +480,7 @@ public class CodeCommentTools
             {
                 inBlockComment = !line.Contains("*/", StringComparison.Ordinal);
                 var text = line.TrimStart('/').TrimStart('*').Trim();
-                if (text.Length > 0) docComments.Add($"L{lineNum}: {text}");
+                if (text.Length > 0) { docComments.Add($"L{lineNum}: {text}"); }
                 CheckTodoFixme(line, lineNum, todoMarkers);
                 continue;
             }
@@ -560,7 +574,7 @@ public class CodeCommentTools
         try
         {
             var info = new FileInfo(path);
-            if (info.Length > 200_000) return null;
+            if (info.Length > 200_000) { return null; }
             return File.ReadAllText(path);
         }
         catch

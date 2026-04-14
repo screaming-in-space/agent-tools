@@ -244,7 +244,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
 
         var (version, commit) = AgentTheme.GetVersionInfo();
         var versionText = $"v{version}";
-        if (commit is not null) versionText += $" ({commit})";
+        if (commit is not null) { versionText += $" ({commit})"; }
 
         var table = new Table()
             .Border(TableBorder.None)
@@ -264,7 +264,7 @@ public sealed class SpectreAgentOutput : IAgentOutput
     /// <summary>Builds a tree where each scanner is a branch with nested tool calls.</summary>
     private Panel? BuildScannerTree()
     {
-        if (_scannerOrder.Count == 0) return null;
+        if (_scannerOrder.Count == 0) { return null; }
 
         var tree = new Tree($"[{AgentTheme.CyanHex} bold]Scanners[/]")
             .Guide(TreeGuide.BoldLine)
@@ -417,18 +417,18 @@ public sealed class SpectreAgentOutput : IAgentOutput
     /// <summary>Shortens model names for display (e.g. "unsloth/nvidia-nemotron-3-nano-4b" → "nano-4b").</summary>
     private static string ShortenModelName(string model)
     {
-        if (string.IsNullOrEmpty(model)) return "?";
+        if (string.IsNullOrEmpty(model)) { return "?"; }
 
         // Strip org prefix
         var idx = model.LastIndexOf('/');
         var name = idx >= 0 ? model[(idx + 1)..] : model;
 
         // Common shortenings
-        if (name.Contains("nano-4b", StringComparison.OrdinalIgnoreCase)) return "nano-4b";
-        if (name.Contains("gemma-4-26b", StringComparison.OrdinalIgnoreCase)) return "gemma-26b";
-        if (name.Contains("gemma-4-31b", StringComparison.OrdinalIgnoreCase)) return "gemma-31b";
-        if (name.Contains("gemma-4-e4b", StringComparison.OrdinalIgnoreCase)) return "gemma-e4b";
-        if (name.Contains("qwen3", StringComparison.OrdinalIgnoreCase)) return "qwen3";
+        if (name.Contains("nano-4b", StringComparison.OrdinalIgnoreCase)) { return "nano-4b"; }
+        if (name.Contains("gemma-4-26b", StringComparison.OrdinalIgnoreCase)) { return "gemma-26b"; }
+        if (name.Contains("gemma-4-31b", StringComparison.OrdinalIgnoreCase)) { return "gemma-31b"; }
+        if (name.Contains("gemma-4-e4b", StringComparison.OrdinalIgnoreCase)) { return "gemma-e4b"; }
+        if (name.Contains("qwen3", StringComparison.OrdinalIgnoreCase)) { return "qwen3"; }
 
         // Generic: take last segment after last hyphen cluster
         return name.Length > 20 ? name[..20] + "..." : name;

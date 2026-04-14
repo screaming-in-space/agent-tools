@@ -79,10 +79,10 @@ public sealed record AgentModelOptions
         foreach (var child in section.GetChildren())
         {
             var options = child.Get<AgentModelOptions>();
-            if (options is null) continue;
+            if (options is null) { continue; }
 
             // Skip embedding models — they can't do chat/function calling
-            if (options.Model.Contains("embed", StringComparison.OrdinalIgnoreCase)) continue;
+            if (options.Model.Contains("embed", StringComparison.OrdinalIgnoreCase)) { continue; }
 
             result[child.Key] = options;
         }

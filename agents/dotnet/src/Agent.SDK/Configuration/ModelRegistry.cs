@@ -43,7 +43,7 @@ public sealed record ModelRegistry
 
     private static T? LoadFile<T>(string path) where T : class
     {
-        if (!File.Exists(path)) return null;
+        if (!File.Exists(path)) { return null; }
 
         try
         {
@@ -156,8 +156,8 @@ public sealed record GpuEntry
     /// </summary>
     public bool CanFit(string modelSlug, string quantization = "q4")
     {
-        if (!Fits.TryGetValue(modelSlug, out var quantMap)) return false;
-        if (!quantMap.TryGetValue(quantization, out var value)) return false;
+        if (!Fits.TryGetValue(modelSlug, out var quantMap)) { return false; }
+        if (!quantMap.TryGetValue(quantization, out var value)) { return false; }
 
         return value.ValueKind switch
         {

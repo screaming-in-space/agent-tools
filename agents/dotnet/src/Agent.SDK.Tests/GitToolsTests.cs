@@ -34,7 +34,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitLog_ReturnsFormattedLog_WithCommitHashes()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitLog(_repoRoot, maxCount: 10);
 
@@ -47,7 +47,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitLog_WithMaxCount_LimitsResults()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitLog(_repoRoot, maxCount: 3);
 
@@ -62,7 +62,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitLog_WithFutureSince_ReturnsNoCommits()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitLog(_repoRoot, since: "2099-01-01");
 
@@ -72,7 +72,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitLog_OutsideRoot_ReturnsError()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitLog(Path.Combine(_repoRoot, "..", ".."));
 
@@ -84,7 +84,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitStats_ReturnsStatistics_WithAuthorsAndActivity()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitStats(_repoRoot);
 
@@ -97,7 +97,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitStats_ContainsDateRange()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitStats(_repoRoot);
 
@@ -107,7 +107,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitStats_ContainsChurnHotspots()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitStats(_repoRoot);
 
@@ -117,7 +117,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitStats_WithFutureSince_ReturnsNoCommits()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitStats(_repoRoot, since: "2099-01-01");
 
@@ -129,12 +129,12 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitDiff_ValidCommit_ReturnsDiffInfo()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         // Get the latest commit SHA from the log
         var log = _tools!.GetGitLog(_repoRoot, maxCount: 5);
         var sha = ExtractFirstSha(log);
-        if (sha is null) return;
+        if (sha is null) { return; }
 
         var result = _tools!.GetGitDiff(_repoRoot, sha);
 
@@ -145,7 +145,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitDiff_InvalidSha_ReturnsError()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitDiff(_repoRoot, "0000000000000000000000000000000000000000");
 
@@ -155,7 +155,7 @@ public sealed class GitToolsTests
     [Fact]
     public void GetGitDiff_OutsideRoot_ReturnsError()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.GetGitDiff(Path.Combine(_repoRoot, "..", ".."), "abc123");
 
@@ -167,7 +167,7 @@ public sealed class GitToolsTests
     [Fact]
     public void CheckJournalExists_NonexistentDirectory_ReturnsFalse()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.CheckJournalExists(
             Path.Combine(_repoRoot, "nonexistent-journal-dir"),
@@ -179,7 +179,7 @@ public sealed class GitToolsTests
     [Fact]
     public void CheckJournalExists_DirectoryWithNoMatch_ReturnsFalse()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         // Use the repo root itself -- unlikely to have journal files matching this date
         var result = _tools!.CheckJournalExists(_repoRoot, "1999-12-31");
@@ -190,7 +190,7 @@ public sealed class GitToolsTests
     [Fact]
     public void CheckJournalExists_DirectoryWithMatch_ReturnsTrue()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         // Create a temp journal directory with a matching file
         var journalDir = Path.Combine(_repoRoot, $"_test-journal-{Guid.NewGuid():N}");
@@ -215,7 +215,7 @@ public sealed class GitToolsTests
     [Fact]
     public void CheckJournalExists_OutsideRoot_ReturnsError()
     {
-        if (_repoRoot is null) return;
+        if (_repoRoot is null) { return; }
 
         var result = _tools!.CheckJournalExists(
             Path.Combine(_repoRoot, "..", ".."),

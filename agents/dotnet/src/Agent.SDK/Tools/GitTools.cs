@@ -43,15 +43,20 @@ public class GitTools
             DateTimeOffset? untilDate = null;
 
             if (since is { Length: > 0 } && DateTimeOffset.TryParse(since, out var s))
+            {
                 sinceDate = s;
+            }
+
             if (until is { Length: > 0 } && DateTimeOffset.TryParse(until, out var u))
+            {
                 untilDate = u;
+            }
 
             var commits = repo.Commits
                 .Where(c =>
                 {
-                    if (sinceDate.HasValue && c.Author.When < sinceDate.Value) return false;
-                    if (untilDate.HasValue && c.Author.When > untilDate.Value) return false;
+                    if (sinceDate.HasValue && c.Author.When < sinceDate.Value) { return false; }
+                    if (untilDate.HasValue && c.Author.When > untilDate.Value) { return false; }
                     return true;
                 })
                 .Take(maxCount)
@@ -146,7 +151,7 @@ public class GitTools
                 {
                     sb.AppendLine($"- {f.Path}");
                 }
-                if (added.Count > 30) sb.AppendLine($"... and {added.Count - 30} more");
+                if (added.Count > 30) { sb.AppendLine($"... and {added.Count - 30} more"); }
                 sb.AppendLine();
             }
 
@@ -157,7 +162,7 @@ public class GitTools
                 {
                     sb.AppendLine($"- {f.Path}");
                 }
-                if (modified.Count > 30) sb.AppendLine($"... and {modified.Count - 30} more");
+                if (modified.Count > 30) { sb.AppendLine($"... and {modified.Count - 30} more"); }
                 sb.AppendLine();
             }
 
@@ -168,7 +173,7 @@ public class GitTools
                 {
                     sb.AppendLine($"- {f.Path}");
                 }
-                if (deleted.Count > 20) sb.AppendLine($"... and {deleted.Count - 20} more");
+                if (deleted.Count > 20) { sb.AppendLine($"... and {deleted.Count - 20} more"); }
                 sb.AppendLine();
             }
 
@@ -216,15 +221,20 @@ public class GitTools
             DateTimeOffset? untilDate = null;
 
             if (since is { Length: > 0 } && DateTimeOffset.TryParse(since, out var s))
+            {
                 sinceDate = s;
+            }
+
             if (until is { Length: > 0 } && DateTimeOffset.TryParse(until, out var u))
+            {
                 untilDate = u;
+            }
 
             var commits = repo.Commits
                 .Where(c =>
                 {
-                    if (sinceDate.HasValue && c.Author.When < sinceDate.Value) return false;
-                    if (untilDate.HasValue && c.Author.When > untilDate.Value) return false;
+                    if (sinceDate.HasValue && c.Author.When < sinceDate.Value) { return false; }
+                    if (untilDate.HasValue && c.Author.When > untilDate.Value) { return false; }
                     return true;
                 })
                 .Take(500) // Limit for performance
@@ -252,7 +262,7 @@ public class GitTools
             var fileChurn = new Dictionary<string, int>();
             foreach (var commit in commits.Take(200))
             {
-                if (!commit.Parents.Any()) continue;
+                if (!commit.Parents.Any()) { continue; }
                 var parent = commit.Parents.First();
                 var diff = repo.Diff.Compare<TreeChanges>(parent.Tree, commit.Tree);
                 foreach (var change in diff)

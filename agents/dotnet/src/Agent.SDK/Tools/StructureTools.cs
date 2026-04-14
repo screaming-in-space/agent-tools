@@ -99,7 +99,7 @@ public class StructureTools
         {
             var doc = XDocument.Load(resolved);
             var root = doc.Root;
-            if (root is null) return "Error: empty project file.";
+            if (root is null) { return "Error: empty project file."; }
 
             var sb = new StringBuilder();
             var name = Path.GetFileNameWithoutExtension(resolved);
@@ -120,11 +120,15 @@ public class StructureTools
             // Special properties
             var publishSingleFile = GetProperty(root, "PublishSingleFile");
             if (publishSingleFile is not null)
+            {
                 sb.AppendLine($"- **PublishSingleFile:** {publishSingleFile}");
+            }
 
             var selfContained = GetProperty(root, "SelfContained");
             if (selfContained is not null)
+            {
                 sb.AppendLine($"- **SelfContained:** {selfContained}");
+            }
 
             sb.AppendLine();
 
@@ -224,7 +228,7 @@ public class StructureTools
         var allReferenced = graph.Values.SelectMany(v => v).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var roots = graph.Keys.Where(k => !allReferenced.Contains(k)).OrderBy(k => k).ToList();
 
-        if (roots.Count == 0) roots = graph.Keys.OrderBy(k => k).ToList();
+        if (roots.Count == 0) { roots = graph.Keys.OrderBy(k => k).ToList(); }
 
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var root in roots)
@@ -270,36 +274,60 @@ public class StructureTools
 
         // N-Tier indicators
         if (Regex.IsMatch(lower, @"\b(core|domain|services|repos|repositories|data|infrastructure|hosts?|api|web)\b"))
+        {
             indicators["N-Tier"] += 3;
+        }
+
         if (Regex.IsMatch(lower, @"\b(controller|handler|middleware)\b"))
+        {
             indicators["N-Tier"]++;
+        }
 
         // Hexagonal indicators
         if (Regex.IsMatch(lower, @"\b(ports?|adapters?|application|domain\.core)\b"))
+        {
             indicators["Hexagonal / Clean"] += 3;
+        }
+
         if (Regex.IsMatch(lower, @"\b(usecase|interactor)\b"))
+        {
             indicators["Hexagonal / Clean"] += 2;
+        }
 
         // Vertical Slice indicators
         if (Regex.IsMatch(lower, @"\b(features?|slices?|mediatr|mediator)\b"))
+        {
             indicators["Vertical Slice"] += 3;
+        }
 
         // Microservices indicators
         var projectCount = Regex.Count(lower, @"\.csproj|\.fsproj");
         if (Regex.IsMatch(lower, @"\b(gateway|worker|relay|service\d|micro)\b"))
+        {
             indicators["Microservices"] += 2;
+        }
+
         if (projectCount > 10)
+        {
             indicators["Microservices"]++;
+        }
 
         // Modular Monolith indicators
         if (Regex.IsMatch(lower, @"\b(modules?|apphost|aspire)\b"))
+        {
             indicators["Modular Monolith"] += 2;
+        }
+
         if (projectCount > 5 && Regex.IsMatch(lower, @"\b(host|apphost)\b"))
+        {
             indicators["Modular Monolith"]++;
+        }
 
         // Monolith
         if (projectCount <= 3)
+        {
             indicators["Monolith"] += 3;
+        }
 
         var ranked = indicators.OrderByDescending(kv => kv.Value).Where(kv => kv.Value > 0).ToList();
 
