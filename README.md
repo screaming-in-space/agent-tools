@@ -1,6 +1,6 @@
 # Agent Tools
 
-Shared [Claude Code](https://claude.ai/claude-code) skills and standalone .NET 10 agents for AI-assisted development workflows.
+Shared [Claude Code](https://claude.ai/claude-code) skills and hooks, and standalone .NET 10 agents, for AI-assisted development workflows.
 
 ## Layout
 
@@ -10,6 +10,8 @@ agent-tools/
 ├── agents/dotnet/                 .NET agent workspace (projects, tests)
 ├── AgentTools.slnx                Solution manifest (all projects)
 ├── benchmarks/                    ModelBoss output (BENCHMARK.md)
+├── hooks/
+│   └── harness/                   Claude Code hooks: glue detector, leases, budgets (Node, no dependencies)
 ├── context/
 │   ├── RULES.md                   Technical constraints, coding patterns, rejected patterns
 │   ├── STRUCTURE.md               Project architecture, directory tree, file map
@@ -162,6 +164,12 @@ Tests use **xUnit v3** (`xunit.v3 3.2.2`). Integration tests in `ModelBoss.Tests
 |-------|-------------|
 | [`agentify`](skills/agentify/) | Bootstrap a repo with ML context files (CLAUDE.md, copilot-instructions.md, AGENTS.md) as thin shims pointing to centralized docs |
 | [`claude-api-qa-creator`](skills/claude-api-qa-creator/) | Generate QA helpers from repo analysis |
+
+## Hooks
+
+| Kit | Description |
+|-------|-------------|
+| [`harness`](hooks/harness/) | Hooks that run by themselves: a glue detector that writes repeated manual steps to `GLUE.md`, leases and a gate so sessions sharing a machine don't collide, a session-start brief and context budget, README-on-touch, compaction rescue, and a local-model wrapper with a battery. Every hook's output is held under Claude Code's 10,000-character cap. `node hooks/harness/install.mjs <project>` |
 
 ## Installation
 

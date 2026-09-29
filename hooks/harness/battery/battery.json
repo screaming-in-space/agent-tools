@@ -1,0 +1,65 @@
+{
+  "about": "Ten jobs a session hands to a local model: classifying, reading long output, triage, first drafts, and saying it doesn't know. Every check is deterministic. Add each miss you meet in real work as a new item, and rerun before trusting a new model, quant or setting.",
+  "items": [
+    {
+      "id": "severity-warning",
+      "system": "Classify the log line. Answer with exactly one word: info, warning or error.",
+      "input": "2026-09-28T10:14:02Z WARN disk usage at 91% on /var/lib/docker, threshold 90%",
+      "expect": { "equals": "warning" }
+    },
+    {
+      "id": "severity-error",
+      "system": "Classify the log line. Answer with exactly one word: info, warning or error.",
+      "input": "2026-09-28T10:14:09Z fail: Microsoft.AspNetCore.Server.Kestrel[13] Connection id \"0HN7\": An unhandled exception was thrown by the application. System.NullReferenceException: Object reference not set to an instance of an object.",
+      "expect": { "equals": "error" }
+    },
+    {
+      "id": "build-which-project",
+      "system": "Read the build output. Answer as <project>: <error code>, nothing else.",
+      "input": "  Determining projects to restore...\n  All projects are up-to-date for restore.\n  Continuum.Contracts -> bin/Debug/net10.0/Continuum.Contracts.dll\n  Continuum.Repos.Context -> bin/Debug/net10.0/Continuum.Repos.Context.dll\n  Continuum.Services.Cortex -> bin/Debug/net10.0/Continuum.Services.Cortex.dll\nsrc/Hosts/Continuum.Gateway/Endpoints/InferEndpoint.cs(41,17): error CS0246: The type or namespace name 'InferRequestV2' could not be found (are you missing a using directive or an assembly reference?) [src/Hosts/Continuum.Gateway/Continuum.Gateway.csproj]\n  Continuum.Relay -> bin/Debug/net10.0/Continuum.Relay.dll\n\nBuild FAILED.\n    0 Warning(s)\n    1 Error(s)",
+      "expect": { "contains": ["Continuum.Gateway", "CS0246"], "maxChars": 60 }
+    },
+    {
+      "id": "failing-test-name",
+      "system": "Name the one failing test, exactly as written, and nothing else.",
+      "input": "  Passed Continuum.Models.Tests.FactModelPinTests.PinMatches [3 ms]\n  Passed Continuum.Models.Tests.SettingsTests.DefaultsResolve [1 ms]\n  Failed Continuum.Models.Tests.FactExtractorTests.AnswersSentenceBySentence [18 ms]\n  Error Message:\n   Assert.Equal() Failure: Values differ\n  Passed Continuum.Models.Tests.SettingsTests.OverridesWin [1 ms]\nTotal tests: 4. Passed: 3. Failed: 1.",
+      "expect": { "equals": "Continuum.Models.Tests.FactExtractorTests.AnswersSentenceBySentence" }
+    },
+    {
+      "id": "count-failures",
+      "system": "How many tests failed? Answer with the number only.",
+      "input": "[xUnit] Failed ChatTests.ReplyArrives\n[xUnit] Passed ChatTests.TitleSet\n[xUnit] Failed ChatTests.PurgeRemovesThread\n[xUnit] Passed IngestTests.SplitsSections\n[xUnit] Failed RecallTests.ThresholdAbstains\n[xUnit] Passed RecallTests.RanksByActivation",
+      "expect": { "equals": "3" }
+    },
+    {
+      "id": "extract-json",
+      "system": "Return only JSON with two keys: host (a string) and port (a number). No code fence.",
+      "input": "Redis listens with TLS on 6379 and in plain text on 6380 inside the container; the host maps the TLS port. Connect to redis.local on the plain-text port for redis-cli.",
+      "expect": { "json": { "host": "redis.local", "port": 6380 } }
+    },
+    {
+      "id": "route-docs",
+      "system": "Route the request to exactly one of: build, test, docs, none. Answer with the one word.",
+      "input": "The README still says the stack starts with dotnet run, but it's continuum stack start now.",
+      "expect": { "equals": "docs" }
+    },
+    {
+      "id": "abstain",
+      "system": "Answer from the text only. If the text doesn't say, answer exactly: unknown",
+      "input": "Text: The extraction queue runs two activities at once, sized to the model's slots.\nQuestion: How many activities does the recall queue run at once?",
+      "expect": { "equals": "unknown" }
+    },
+    {
+      "id": "timeout-yes-no",
+      "system": "Does this stack trace show a timeout? Answer yes or no.",
+      "input": "System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.\n ---> System.TimeoutException: A task was canceled.\n   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted)",
+      "expect": { "equals": "yes" }
+    },
+    {
+      "id": "commit-subject",
+      "system": "Write a git commit subject line for this diff: imperative mood, under 60 characters, no full stop at the end. Output the line only.",
+      "input": "--- a/src/Core/Utilities/Continuum.Operations/StackStart.cs\n+++ b/src/Core/Utilities/Continuum.Operations/StackStart.cs\n-    private static readonly TimeSpan HealthTimeout = TimeSpan.FromSeconds(60);\n+    // A cold machine starts Docker first; 60 s wasn't enough for the Temporal container.\n+    private static readonly TimeSpan HealthTimeout = TimeSpan.FromSeconds(180);",
+      "expect": { "regex": "^[A-Z][a-z]+ .*[^.]$", "contains": ["timeout"], "maxChars": 60 }
+    }
+  ]
+}

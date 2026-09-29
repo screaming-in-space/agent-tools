@@ -10,6 +10,14 @@ agent-tools/
 │   └── CLAUDE.md                        # Thin shim → context/RULES.md, context/STRUCTURE.md
 ├── .github/
 │   └── copilot-instructions.md          # Thin shim → context/RULES.md, context/STRUCTURE.md
+├── hooks/
+│   └── harness/                         # Claude Code hooks, Node with no dependencies: see hooks/harness/README.md
+│       ├── lib/                         # common.mjs (input, config, transcript readers), emit.mjs (every injected string, under budget), leases.mjs
+│       ├── battery/battery.json         # Ten deterministic jobs to measure a local model on
+│       ├── rules/example.md             # A rule scoped with paths:
+│       ├── test/                        # smoke.mjs (every hook, real payloads), proof-sessions.mjs (inside real sessions)
+│       ├── *.mjs                        # The hooks, lease.mjs, local-llm.mjs and install.mjs
+│       └── harness.json, settings.json, claude-block.md  # Config, the hooks block install.mjs merges, the CLAUDE.md block
 ├── context/
 │   ├── models/
 │   │   ├── nvidia-nemotron-3-nano-4b.md   # Model capability profile
